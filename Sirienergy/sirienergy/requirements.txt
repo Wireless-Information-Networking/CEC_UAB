@@ -1,0 +1,8 @@
+flask
+redis
+pandas
+openmeteo-requests
+requests-cache
+retry-requests
+xmltodict
+pvlib

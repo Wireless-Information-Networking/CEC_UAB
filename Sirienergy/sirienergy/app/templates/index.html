@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SIRIENERGY</title>
+        <link rel="stylesheet" href="/static_files/css/style.css">
+        <link rel="stylesheet" href="/static_files/css/assets.css">
+        <link rel="manifest" href="/static_files/manifest.json">
+        <link rel="icon" href="/assets/images/icons/circle.ico">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+    <body>
+        <header>
+            <h1>SIRIENERGY</h1>
+        </header>
+        <div id="home" class="main-page">
+            <div class="album" id="album">
+                <div class="card" id="weather-card">
+                    <div class="loader"></div>
+                </div>
+                <div class="card" id="price-card">
+                    <div class="loader"></div>
+                </div>
+                <div class="card" id="PV-generation-card">
+                    <div class="loader"></div>
+                </div>
+                <div class="card" id="sell-card">
+                    <div class="loader"></div>
+                </div>
+                <div class="card" id="country-generation-card">
+                    <div class="loader"></div>
+                </div>
+                <div class="card" id="prodcons-card">
+                    <div class="loader"></div>
+                </div>
+                <div class="card" id="surplus-card">
+                    <div class="loader"></div>
+                </div>
+                <div class="flip-card" id="siri-card" style="display: flex;">
+                    
+                </div>
+            </div>
+        </div>
+        <div id="user" class="main-page">
+            <form id="user-form">
+                <div id=" user-account-form">
+                    <h2>Account:</h2>
+                    E-mail address: <input type="text" name="email" id="email" style="width: 180px;">
+                </div>
+                <div id=" user-position-form">
+                    <h2>Location:</h2>
+                    <div>
+                        <label for="country-select">Choose a country:</label>
+                        <select id="country-select" name="countries">
+                            <option value="Austria">Austria</option>
+                            <option value="Belgium">Belgium</option>
+                            <option value="Croatia">Croatia</option>
+                            <option value="Estonia">Estonia</option>
+                            <option value="Finland">Finland</option>
+                            <option value="France">France</option>
+                            <option value="Germany">Germany</option>
+                            <option value="Greece">Greece</option>
+                            <option value="Hungary">Hungary</option>
+                            <option value="Latvia">Latvia</option>
+                            <option value="Lithuania">Lithuania</option>
+                            <option value="Luxemburg">Luxemburg</option>
+                            <option value="Netherlands">Netherlands</option>
+                            <option value="Poland">Poland</option>
+                            <option value="Portugal">Portugal</option>
+                            <option value="Romania">Romania</option>
+                            <option value="Slovakia">Slovakia</option>
+                            <option value="Slovenia">Slovenia</option>
+                            <option value="Spain">Spain</option>
+                        </select>
+                    </div>
+                    PV position (latitude, longitude):<input type="number" step="0.01" name="lat" id="lat">º<input type="number" step="0.01" name="lon" id="lon">º
+                    <button type="button" onclick="getCoords()"> Get location </button><br />
+                    Altitude:<input type="number" step="0.01" name="alt" id="alt">m <br>
+                    Time Zone:<select id="time-zone-input" name="timezone">
+                        <option value="Europe/Vienna">Europe/Vienna</option>
+                        <option value="Europe/Brussels">Europe/Brussels</option>
+                        <option value="Europe/Zagreb">Europe/Zagreb</option>
+                        <option value="Europe/Tallinn">Europe/Tallinn</option>
+                        <option value="Europe/Helsinki">Europe/Helsinki</option>
+                        <option value="Europe/Paris">Europe/Paris</option>
+                        <option value="Europe/Berlin">Europe/Berlin</option>
+                        <option value="Europe/Athens">Europe/Athens</option>
+                        <option value="Europe/Budapest">Europe/Budapest</option>
+                        <option value="Europe/Riga">Europe/Riga</option>
+                        <option value="Europe/Vilnius">Europe/Vilnius</option>
+                        <option value="Europe/Luxembourg">Europe/Luxembourg</option>
+                        <option value="Europe/Amsterdam">Europe/Amsterdam</option>
+                        <option value="Europe/Warsaw">Europe/Warsaw</option>
+                        <option value="Europe/Lisbon">Europe/Lisbon</option>
+                        <option value="Europe/Bucharest">Europe/Bucharest</option>
+                        <option value="Europe/Bratislava">Europe/Bratislava</option>
+                        <option value="Europe/Ljubljana">Europe/Ljubljana</option>
+                        <option value="Europe/Madrid">Europe/Madrid</option>
+                      </select><br>
+                </div>
+                <div id="user-install-form">
+                    <h2>PV Installation</h2>
+                    Total surface:<input type="number" step="0.01" name="surface" id="surface">m&sup2;<br/>
+                    Panel efficiency:<input type="number" step="0.01" name="efficiency" id="efficiency">%
+                </div>
+                <div id="user-battery-form">
+                    <h2>Battery:</h2>
+                    <label for="has-battery">Do you have a battery?</label>
+                    <input type="checkbox" id="has-battery" name="has-battery">
+                    <div id="battery-capacity">
+                        <label for="battery-energy">Battery energy capacity (kWh):</label>
+                        <input type="number" step="0.01" name="battery-energy" id="battery-energy">
+                    </div>
+                </div>
+                <div id="sell-form">
+                    <h2>PV Installation</h2>
+                    Fee type:<select id="fee-type-input" name="fee-type">
+                        <option value="FIXED">Self-consumption with surplus compensation</option>
+                        <option value="MARKET">Direct sale of electricity to the grid</option>
+                    </select><br>
+                    Value (only if your fee type is self-consumption with surplus compensation):<input type="number" step="0.01" name="fixed-value" id="fixed-value">€/kWh
+                </div>
+                <button type="submit"> Save </button>
+            </form>
+            
+        </div>
+        <div id="nav">
+            <div class="nav-item" id="home-nav-item">
+                <button onclick="showHome()">
+                    <img class="nav-image" src="/static_files/images/nav/home_icon.png" alt="Home button">
+                </button>
+            </div>
+            <div class="nav-item" id="user-nav-item">
+                <button onclick="showUser()">
+                   <img class="nav-image" src="/static_files/images/nav/user_icon.png" alt="User button">
+                </button>
+            </div>
+        </div>
+        <script src="/static_files/js/app.js"></script>
+    </body>
+</html>

@@ -1,0 +1,31 @@
+services:
+  nginx:
+    image: openresty/openresty:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./common/auth_keys.csv:/etc/nginx/auth_keys.csv
+      - ./nginx/validation.lua:/etc/nginx/validation.lua
+      - ./ssl/sirienergy/server.key:/etc/nginx/ssl/private/server.key
+      - ./ssl/sirienergy/sirienergy_uab_cat.pem:/etc/nginx/ssl/private/sirienergy_uab_cat.pem
+    depends_on:
+      - redis
+      - sirienergy
+    container_name: nginx_proxy
+
+  redis:
+    image: redislabs/rejson:latest
+    container_name: redisjson
+    ports:
+      - "6379:6379"
+
+  sirienergy:
+    build:
+      context: ./sirienergy
+    container_name: sirienergy
+    volumes:
+      - ./sirienergy:/usr/src/app
+    env_file:
+      - ./sirienergy/.env

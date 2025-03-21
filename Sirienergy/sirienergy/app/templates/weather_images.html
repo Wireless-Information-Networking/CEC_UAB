@@ -1,0 +1,10 @@
+<div id="image-gallery" style="display: flex; justify-content: center; overflow-x: hidden;">
+    <div style="display: flex; overflow-x: auto; white-space: nowrap; padding: 5px 10px 5px;">
+        {% for image in images %}
+        <div class="weather-image" style="text-align: center; min-width: 60px; margin-right: 10px;">
+            <img src="/static_files/images/weather/{{ image }}.svg" alt="{{ image }}" style="width: 50px;">
+            <p style="margin: 0; font-size: 14px; text-align: center;">{{ loop.index0 }}:00</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
