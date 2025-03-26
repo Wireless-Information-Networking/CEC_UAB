@@ -1,0 +1,5 @@
+#ignore all virtual environment files
+venv/*
+
+#ignore all test files
+test/*

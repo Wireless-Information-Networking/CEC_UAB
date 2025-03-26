@@ -1,11 +1,16 @@
 """PV generation calculation controller using pvlib."""
 
 from flask import Blueprint, request, jsonify
-from app.models.pvlib_model import *
+from app.models.pvlib_model import get_PV_gen
+import logging
 
-pvlib_bp = Blueprint('pvlib', __name__)
+MODULE_TYPE = "controller"
+MODULE_NAME = "pvlib"
+MODULE_DEBUG = 1
 
-@pvlib_bp.route('/PVgen', methods=['POST'])
+pvlib_bp = Blueprint("pvlib", __name__)
+
+@pvlib_bp.route("/PVgen", methods=["POST"])
 def PVgen():
     """Calculates photovoltaic power generation for given coordinates.
 
@@ -25,24 +30,33 @@ def PVgen():
         - 200 with power data on success
     """
     data = request.json
-    if 'latitude' not in data or 'longitude' not in data or 'altitude' not in data or 'timezone' not in data:
-        return jsonify({"error": "Invalid input. Please provide latitude, longitude, altitude, and timezone."}), 400
+    if ("latitude" not in data or
+        "longitude" not in data or
+        "altitude" not in data or
+        "timezone" not in data):
+        return jsonify({
+            "error": """Invalid input. Please provide
+                    latitude, longitude, altitude, and timezone."""
+        }), 400
 
     try:
         # Convert inputs to the correct types
-        latitude = float(data['latitude'])
-        longitude = float(data['longitude'])
-        altitude = float(data['altitude']) 
-        surface = float(data['surface'])
-        efficiency = float(data['efficiency'])
-        tz = data['timezone']  # Timezone as a string
+        latitude = float(data["latitude"])
+        longitude = float(data["longitude"])
+        altitude = float(data["altitude"])
+        surface = float(data["surface"])
+        efficiency = float(data["efficiency"])
+        tz = data["timezone"]  # Timezone as a string
 
-        power_array = get_PV_gen(latitude, longitude, altitude, surface, efficiency, tz)
-
-        #logging.info(power_array)
+        power_array = get_PV_gen(latitude, longitude, altitude, surface,
+                                 efficiency, tz)
 
         # Return GHI as an array
-        return jsonify({"power": power_array})
-    
-    except ValueError:
+        return jsonify({"power": power_array}), 200
+
+    except ValueError as error:
+        logging.error(f"ValueError: {error}")
         return jsonify({"error": "Something went wrong. Try again later."}), 500
+    except Exception as error:
+        logging.error(f"Exception: {error}")
+        return jsonify({"error": str(error)}), 500

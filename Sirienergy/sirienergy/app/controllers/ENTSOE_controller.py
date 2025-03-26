@@ -56,7 +56,7 @@ def actual_generation_by_type():
 
         co2_dict = load_co2_by_type()
         co2 = get_co2_from_dict(generation, co2_dict)
-        
+
         return jsonify({
             'data': generation,
             'co2': co2

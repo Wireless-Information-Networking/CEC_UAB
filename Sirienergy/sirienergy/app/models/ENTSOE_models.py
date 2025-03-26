@@ -6,12 +6,15 @@ import logging
 import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
-
+from app.aux.aux_modules.logging_helper import log_message
 import requests
 import xmltodict
 
 from app.config import Config
 
+MODULE_TYPE = "model"
+MODULE_NAME = "ENTSOE"
+MODULE_DEBUG = 1
 
 def load_entsoe_country_keys() -> Dict[str, str]:
     """Loads country keys from a CSV file for ENTSO-E API queries.
@@ -82,11 +85,15 @@ def get_day_ahead_prices(
         "periodStart": yesterday_formatted,
         "periodEnd": current_formatted,
     }
+    if Config.DEBUG and MODULE_DEBUG and 1:
+        log_message("debug", MODULE_TYPE, MODULE_NAME, "get_day_ahead_prices", f"Entsoe request: {params}")
 
     response = requests.get(endpoint, params=params, timeout=30)
     data_xml = response.text
     data_dict = xmltodict.parse(data_xml)
     data_json = json.loads(json.dumps(data_dict))
+    if Config.DEBUG and MODULE_DEBUG and 1:
+        log_message("debug", MODULE_TYPE, MODULE_NAME, "get_day_ahead_prices", f"Entsoe response json: {data_json}")
 
     if response.status_code == 200:
         time_series_list = data_json["Publication_MarketDocument"].get("TimeSeries", [])
