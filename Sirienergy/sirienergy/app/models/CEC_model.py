@@ -6,11 +6,8 @@ user creation, consumption tracking, and production tracking.
 
 import hashlib
 import json
-import logging
-from app.aux.aux_modules.logging_helper import log_message
-
 import redis
-
+from app.aux.aux_modules.logging_helper import log_message
 from app.config import Config
 
 MODULE_TYPE = "model"
@@ -41,7 +38,10 @@ class RedisModel:
             decode_responses=True,
         )
 
-    def create_user(self, user_name: str, user_email: str, user_password: str) -> dict:
+    def create_user(self,
+                    user_name: str,
+                    user_email: str,
+                    user_password: str) -> dict:
         """Creates a new user in Redis.
 
         Args:
@@ -60,13 +60,16 @@ class RedisModel:
             "user_consumption": {},
             "user_production": {},
         }
-        self.client.execute_command("JSON.SET", key, ".", json.dumps(user_document))
+        self.client.execute_command("JSON.SET", key, ".",
+                                    json.dumps(user_document))
         return {
-            "message": f"User '{user_name}' with email {user_email} has been created."
+            "message": f"""User '{user_name}' with email 
+            {user_email} has been created."""
         }
 
     def _initialize_json_path(self, key: str, path: str) -> None:
-        """Ensures that a JSON path exists in Redis, initializing it if necessary.
+        """Ensures that a JSON path exists in Redis, initializing 
+        it if necessary.
 
         Args:
             key: The Redis key.
@@ -101,7 +104,8 @@ class RedisModel:
         """
         if data_type not in {"user_consumption", "user_production"}:
             raise ValueError(
-                "Invalid data type. Must be 'user_consumption' or 'user_production'."
+                """Invalid data type. Must be 'user_consumption'
+                or 'user_production'."""
             )
 
         key = f"user:{user_email}"
@@ -121,7 +125,8 @@ class RedisModel:
             raise ValueError(f"Failed to update {data_type} value: {error}")
 
         return {
-            "message": f"{data_type.replace('_', ' ').capitalize()} of {value} added for {date} at {hour}."
+            "message": f"""{data_type.replace('_', ' ').capitalize()} 
+            of {value} added for {date} at {hour}."""
         }
 
     def get_user(self, user_email: str) -> dict | None:
@@ -135,9 +140,11 @@ class RedisModel:
         """
         key = f"user:{user_email}"
         json_data = self.client.execute_command("JSON.GET", key)
-        logging.debug(
-            "[RedisModel] (get_user) Key: %s, Query result: %s", key, json_data
-        )
+        if Config.DEBUG and MODULE_DEBUG and 1:
+            log_message(
+                "debug", MODULE_TYPE, MODULE_NAME, "get_user",
+                f"Key: {key}, Query result: {json_data}"
+            )
         return json.loads(json_data) if json_data else None
 
     def get_data_day(self, user_email: str, date: str, data_type: str) -> dict:
@@ -149,33 +156,42 @@ class RedisModel:
             data_type: Either "user_consumption" or "user_production".
 
         Returns:
-            A dictionary with the data for the specified date or an empty structure
-            if no data exists.
+            A dictionary with the data for the specified date or an empty
+            structure if no data exists.
         """
         if data_type not in {"user_consumption", "user_production"}:
             raise ValueError(
-                "Invalid data type. Must be 'user_consumption' or 'user_production'."
+                """Invalid data type. Must be 'user_consumption'
+                  or 'user_production'."""
             )
 
         key = f"user:{user_email}"
         date_path = f"$.{data_type}.{date}"
         if Config.DEBUG and MODULE_DEBUG and 1:
-            log_message("debug", MODULE_TYPE, MODULE_NAME, "get_data_day",
-                        f"Key: {key} Date path: {date_path}")
+            log_message(
+                "debug", MODULE_TYPE, MODULE_NAME, "get_data_day",
+                f"Key: {key}, Date path: {date_path}"
+            )
         try:
-            existing_data = self.client.execute_command("JSON.GET", key, date_path)
+            existing_data = self.client.execute_command("JSON.GET", key,
+                                                        date_path)
             if Config.DEBUG and MODULE_DEBUG and 1:
-                log_message("debug", MODULE_TYPE, MODULE_NAME, "get_data_day",
-                            f"Data got from BD: \n {existing_data}")
-            
+                log_message(
+                    "debug", MODULE_TYPE, MODULE_NAME, "get_data_day",
+                    f"Data got from BD: \n {existing_data}"
+                )
+
             data_json = json.loads(existing_data) if existing_data else {}
             if Config.DEBUG and MODULE_DEBUG and 1:
-                log_message("debug", MODULE_TYPE, MODULE_NAME, "get_data_day",
-                            f"Data got from BD as a json: \n {data_json}")
+                log_message(
+                    "debug", MODULE_TYPE, MODULE_NAME, "get_data_day",
+                    f"Data got from BD as a json: \n {data_json}"
+                )
 
             return data_json
         except redis.RedisError as error:
-            raise ValueError(f"Failed to retrieve {data_type} for {date}: {error}")
+            raise ValueError(f"""Failed to retrieve {data_type} for {date}:
+                              {error}""")
 
     def add_consumption(
         self, user_email: str, date: str, hour: str, value: float
