@@ -74,5 +74,3 @@ Sirienergy/  # Root project folder
 
 
 
-
-

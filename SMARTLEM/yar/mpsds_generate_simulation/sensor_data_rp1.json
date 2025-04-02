@@ -1,0 +1,35 @@
+
+{
+    "house_id": "house_1",
+    "timestamp": "2024-10-28T17:17:30.574203",
+    "energy_management_sensors": {
+        "solar_power": {
+            "production": 4.67,
+            "grid_consumption": 2.36
+        },
+        "battery": {
+            "charge_level": 57.06,
+            "discharging_rate": 3.26,
+            "health_status": "poor"
+        },
+        "energy_efficiency": {
+            "device_consumption": {
+                "device_1": 2.67,
+                "device_2": 2.41,
+                "device_3": 1.69,
+                "device_4": 2.43,
+                "device_5": 2.99
+            },
+            "load_balancing": 0.62
+        }
+    },
+    "water_management_sensors": {
+        "usage_tracking": 50.28
+    },
+    "climate_and_environment_sensors": {
+        "temperature": 16.12,
+        "humidity": 64.99,
+        "air_quality": 110.41
+    }
+}
+
