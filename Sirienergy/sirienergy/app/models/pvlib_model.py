@@ -25,7 +25,8 @@ def get_PV_gen(
         tz: Timezone of the location (e.g., 'Europe/Berlin').
 
     Returns:
-        List of hourly PV power generation values in watts for September 21, 2024.
+        List of hourly PV power generation values in watts for September 21,
+        2024.
     """
     location = pvlib.location.Location(
         latitude=latitude,

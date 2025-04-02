@@ -6,18 +6,21 @@ import logging
 import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
-
 import requests
 import xmltodict
-
+from app.aux.aux_modules.logging_helper import log_message
 from app.config import Config
 
+MODULE_TYPE = "model"
+MODULE_NAME = "ENTSOE"
+MODULE_DEBUG = 1
 
 def load_entsoe_country_keys() -> Dict[str, str]:
     """Loads country keys from a CSV file for ENTSO-E API queries.
 
     Returns:
-        Dict[str, str]: A dictionary mapping country names to their respective ENTSO-E keys.
+        Dict[str, str]: A dictionary mapping country names to their respective 
+            ENTSO-E keys.
     """
     base_dir = os.path.dirname(__file__)
     file_path = os.path.abspath(
@@ -36,7 +39,8 @@ def load_entsoe_gentype_names() -> Dict[str, str]:
     """Loads generation type names from a CSV file for ENTSO-E API queries.
 
     Returns:
-        Dict[str, str]: A dictionary mapping ENTSO-E generation type keys to their names.
+        Dict[str, str]: A dictionary mapping ENTSO-E generation type keys to
+            their names.
     """
     base_dir = os.path.dirname(__file__)
     file_path = os.path.abspath(
@@ -60,8 +64,10 @@ def get_day_ahead_prices(
         country_name: The name of the country for which to retrieve prices.
 
     Returns:
-        A list of price points for the day-ahead market, or None if the request fails.
+        A list of price points for the day-ahead market, or None if the request
+        fails.
     """
+
     endpoint = "https://web-api.tp.entsoe.eu/api"
     current_datetime = datetime.now()
     yesterday_datetime = current_datetime - timedelta(days=1)
@@ -82,14 +88,22 @@ def get_day_ahead_prices(
         "periodStart": yesterday_formatted,
         "periodEnd": current_formatted,
     }
+    if Config.DEBUG and MODULE_DEBUG and 1:
+        log_message("debug", MODULE_TYPE, MODULE_NAME, "get_day_ahead_prices",
+                    f"Entsoe request: {params}")
 
     response = requests.get(endpoint, params=params, timeout=30)
     data_xml = response.text
     data_dict = xmltodict.parse(data_xml)
     data_json = json.loads(json.dumps(data_dict))
+    if Config.DEBUG and MODULE_DEBUG and 1:
+        log_message("debug", MODULE_TYPE, MODULE_NAME, "get_day_ahead_prices",
+                    f"Entsoe response json: {data_json}")
 
     if response.status_code == 200:
-        time_series_list = data_json["Publication_MarketDocument"].get("TimeSeries", [])
+
+        time_series_list = data_json["Publication_MarketDocument"].get(
+            "TimeSeries", [])
         points = []
 
         if isinstance(time_series_list, list):
@@ -119,7 +133,8 @@ def entsoe_to_array(data: List[Dict[str, str]]) -> List[float]:
         data: A list of dictionaries containing ENTSO-E time series data.
 
     Returns:
-        A structured array of prices, with missing values filled using the previous value.
+        A structured array of prices, with missing values filled using the 
+        previous value.
     """
     max_position = max(int(item["position"]) for item in data)
     result: List[Optional[float]] = [None] * max_position
@@ -147,7 +162,8 @@ def entsoe_to_array(data: List[Dict[str, str]]) -> List[float]:
 def get_price_array(
     country_name: str, price_type: str, fixed_value: float = 0.0
 ) -> Optional[List[float]]:
-    """Generates a price array based on the specified type (fixed or market prices).
+    """Generates a price array based on the specified type (fixed or market 
+    prices).
 
     Args:
         country_name: The name of the country for which to retrieve prices.
@@ -163,20 +179,24 @@ def get_price_array(
         prices_dict = get_day_ahead_prices(country_name)
         if prices_dict is None:
             return None
-        return [round(value / 1000, 5) for value in entsoe_to_array(prices_dict)]
+        return [round(value / 1000, 5) for value in
+                entsoe_to_array(prices_dict)]
     else:
         logging.error("Invalid price type: %s", price_type)
         return None
 
 
-def load_co2_by_type(file_path: str = "entsoe_tables/CO2.csv") -> Dict[str, float]:
+def load_co2_by_type(file_path: str = "entsoe_tables/CO2.csv"
+                     ) -> Dict[str, float]:
     """Loads CO2 emission factors by generation type from a CSV file.
 
     Args:
-        file_path: The path to the CSV file. Defaults to "entsoe_tables/CO2.csv".
+        file_path: The path to the CSV file. Defaults to 
+            "entsoe_tables/CO2.csv".
 
     Returns:
-        A dictionary mapping energy types to their CO2 emission factors (gCO2eq/Wh).
+        A dictionary mapping energy types to their CO2 emission 
+        factors (gCO2eq/Wh).
     """
     base_dir = os.path.dirname(__file__)
     file_path = os.path.abspath(
@@ -190,12 +210,13 @@ def load_co2_by_type(file_path: str = "entsoe_tables/CO2.csv") -> Dict[str, floa
             co2_by_gentype[row["Energy Type"]] = float(row["gCO2eq/Wh"])
     return co2_by_gentype
 
-
-def get_actual_generation_by_type(country_name: str) -> Optional[Dict[str, int]]:
+def get_actual_generation_by_type(country_name: str
+                                  ) -> Optional[Dict[str, int]]:
     """Retrieves actual electricity generation data by type for a given country.
 
     Args:
-        country_name: The name of the country for which to retrieve generation data.
+        country_name: The name of the country for which to retrieve generation
+            data.
 
     Returns:
         A dictionary mapping generation types to their values, or None on error.
@@ -237,7 +258,8 @@ def get_actual_generation_by_type(country_name: str) -> Optional[Dict[str, int]]
         return None
 
     gens = {}
-    time_series_list = data_json.get("GL_MarketDocument", {}).get("TimeSeries", [])
+    time_series_list = data_json.get("GL_MarketDocument", {}).get(
+    "TimeSeries", [])
     last_up_time = yesterday_datetime
     date_format = "%Y-%m-%dT%H:%MZ"
 
@@ -253,9 +275,11 @@ def get_actual_generation_by_type(country_name: str) -> Optional[Dict[str, int]]
 
         for time_series in time_series_list:
             if last_up_time_str == time_series["Period"]["timeInterval"]["end"]:
-                gentype = entsoe_gentype_names[time_series["MktPSRType"]["psrType"]]
+                gentype = entsoe_gentype_names[time_series["MktPSRType"]
+                                               ["psrType"]]
                 if "inBiddingZone_Domain.mRID" in time_series:
-                    gens[gentype] = int(time_series["Period"]["Point"][-1]["quantity"])
+                    gens[gentype] = int(time_series["Period"]["Point"]
+                                        [-1]["quantity"])
                 else:
                     gens[gentype] = gens.get(gentype, 0)
 
@@ -269,7 +293,8 @@ def get_actual_generation_by_type(country_name: str) -> Optional[Dict[str, int]]
 def get_co2_from_dict(
     power_dict: Dict[str, int], co2_dict: Dict[str, float]
 ) -> float:
-    """Calculates total CO2 emissions based on power generation and emission factors.
+    """Calculates total CO2 emissions based on power generation and emission 
+    factors.
 
     Args:
         power_dict: A dictionary mapping generation types to power values.
@@ -278,7 +303,8 @@ def get_co2_from_dict(
     Returns:
         The total CO2 emissions in gCO2eq.
     """
-    return sum(value * co2_dict.get(key, 0.0) for key, value in power_dict.items())
+    return sum(value * co2_dict.get(key, 0.0) for key, value in
+               power_dict.items())
 
 
 def sell_by_hours(
@@ -291,7 +317,8 @@ def sell_by_hours(
         gen_array: A list of generation values per hour.
 
     Returns:
-        A list of revenue values per hour, or None if arrays have different lengths.
+        A list of revenue values per hour, or None if arrays have different 
+        lengths.
     """
     if len(price_array) != len(gen_array):
         logging.error("Arrays must have the same length. Got %s vs %s",

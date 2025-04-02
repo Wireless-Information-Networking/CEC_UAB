@@ -1,4 +1,5 @@
-"""Weather data retrieval and processing module using Open-Meteo and WeatherAPI."""
+"""Weather data retrieval and processing module using Open-Meteo and 
+WeatherAPI."""
 
 from datetime import datetime
 from typing import Tuple
@@ -37,11 +38,12 @@ def get_weather(
         "hourly": "weather_code",
         "timezone": timezone,
     }
-    
-    responses = openmeteo.weather_api("https://api.open-meteo.com/v1/forecast", params)
+
+    responses = openmeteo.weather_api("https://api.open-meteo.com/v1/forecast",
+                                       params)
     response = responses[0]
     hourly = response.Hourly()
-    
+
     hourly_data = {
         "date": pd.date_range(
             start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
@@ -50,11 +52,11 @@ def get_weather(
             inclusive="left",
         )
     }
-    
+
     utc_offset = pd.to_timedelta(response.UtcOffsetSeconds(), unit="s")
     hourly_data["date"] += utc_offset
     hourly_data["weather_code"] = hourly.Variables(0).ValuesAsNumpy()
-    
+
     dataframe = pd.DataFrame(hourly_data).head(24)
     dataframe["weather_code"] = dataframe["weather_code"].astype(int).astype(str)
     return dataframe
@@ -68,7 +70,8 @@ def get_sunrise_sunset(latitude: float, longitude: float) -> Tuple[str, str]:
         longitude: Longitude of the location in degrees.
 
     Returns:
-        Tuple containing sunrise and sunset times as strings ('06:30 AM' format).
+        Tuple containing sunrise and sunset times as strings ('06:30 AM' 
+        format).
 
     Raises:
         requests.HTTPError: If API request fails.
@@ -82,7 +85,7 @@ def get_sunrise_sunset(latitude: float, longitude: float) -> Tuple[str, str]:
 
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
-    
+
     data = response.json()
     astronomy = data["astronomy"]["astro"]
     return astronomy["sunrise"], astronomy["sunset"]
@@ -120,6 +123,6 @@ def image_array(
 
     codes["day_night"] = codes["date"].apply(_get_day_night)
     return codes.apply(
-        lambda row: f"{row['day_night']}-{row['weather_code']}", 
+        lambda row: f"{row['day_night']}-{row['weather_code']}",
         axis=1
     ).tolist()

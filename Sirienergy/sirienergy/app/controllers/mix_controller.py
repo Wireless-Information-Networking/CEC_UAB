@@ -1,13 +1,17 @@
 """Energy mix calculation controller for PV system revenue simulation."""
 
 from flask import Blueprint, request, jsonify
-from app.models.ENTSOE_models import *
-from app.models.pvlib_model import *
+from app.models.ENTSOE_models import get_price_array, sell_by_hours
+from app.models.pvlib_model import get_PV_gen
 import logging
 
-mix_bp = Blueprint('mix', __name__)
+MODULE_TYPE = "controller"
+MODULE_NAME = "mix"
+MODULE_DEBUG = 1
 
-@mix_bp.route('/sell', methods=['POST'])
+mix_bp = Blueprint("mix", __name__)
+
+@mix_bp.route("/sell", methods=["POST"])
 def sell():
     """Calculates potential revenue from PV system energy sales.
 
@@ -30,28 +34,39 @@ def sell():
         - 200 with revenue data on success
     """
     data = request.json
-    if 'latitude' not in data or 'longitude' not in data or 'altitude' not in data or 'timezone' not in data:
-        return jsonify({"error": "Invalid input. Please provide latitude, longitude, altitude, and timezone."}), 400
-    
+    if ("latitude" not in data or
+        "longitude" not in data or
+        "altitude" not in data or
+        "timezone" not in data):
+        return jsonify({
+            "error": """Invalid input. Please provide
+                    latitude, longitude, altitude, and timezone."""
+        }), 400
+
     try:
-        latitude = float(data['latitude'])
-        longitude = float(data['longitude'])
-        altitude = float(data['altitude']) 
-        surface = float(data['surface'])
-        efficiency = float(data['efficiency'])
-        tz = data['timezone']
-        country = data['country']
-        fee = data['fee'] 
-        fixed_value = data['fixed_price']
+        latitude = float(data["latitude"])
+        longitude = float(data["longitude"])
+        altitude = float(data["altitude"])
+        surface = float(data["surface"])
+        efficiency = float(data["efficiency"])
+        tz = data["timezone"]
+        country = data["country"]
+        fee = data["fee"]
+        fixed_value = data["fixed_price"]
 
         price_array = get_price_array(country, fee, fixed_value)
-        power_array = get_PV_gen(latitude, longitude, altitude, surface, efficiency, tz)
+        power_array = get_PV_gen(latitude, longitude, altitude, surface,
+                                 efficiency, tz)
 
-        power_array = [round(value/1000, 5) for value in power_array]
+        power_array = [round(value / 1000, 5) for value in power_array]
 
         euros_by_hours = sell_by_hours(price_array, power_array)
 
-        return jsonify({"sell": euros_by_hours})
-    
-    except ValueError:
+        return jsonify({"sell": euros_by_hours}), 200
+
+    except ValueError as error:
+        logging.error(f"ValueError: {error}")
         return jsonify({"error": "Something went wrong. Try again later."}), 500
+    except Exception as error:
+        logging.error(f"Exception: {error}")
+        return jsonify({"error": str(error)}), 500
