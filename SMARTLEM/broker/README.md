@@ -1,6 +1,6 @@
 # MQTT Admin Panel
 
-This project is an Electron-based application designed to manage and monitor an MQTT broker. It provides a user-friendly interface for administrators to control the broker, manage connected clients, and view system information.
+This project is an Electron-based application designed to manage and monitor an MQTT broker. It provides a user-friendly interface for administrators to control the broker, manage connected clients, and view system information. It also sends information to Sirienergy.
 
 ## Features
 
