@@ -89,6 +89,11 @@ yar/
 - ```puppeteer.py```: A Python script that generates simulated smart home data (e.g., energy, water, climate metrics) and saves it as JSON files
 
 
+
+## Disclaimer
+For now, the simulator cannot connect to the broker, please, choose run on same machine and "fast_foward" simulation. The connection to the broker will be fixed soon
+
+
 ### Setup Instructions
 ## Prerequisites
 - ***Node.js (v14 or higher):*** For running Electron and managing frontend dependencies.
