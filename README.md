@@ -17,3 +17,15 @@ The Yar Smart House Simulator is a desktop application designed to simulate and 
 ### Broker
 
 The Broker Panel is an Electron-based application designed to manage and monitor an MQTT broker. It provides a user-friendly interface for administrators to control the broker, manage connected clients, and view system information. Key features include broker management, client management, system information display, and integration with Sirienergy.
+
+## Connection
+The Yar simulator is designed to interoperate seamlessly with Sirienergy through a RESTful API. This integration allows Yar to send real-time or batch simulation data—such as energy consumption, solar production, and battery usage—directly to the Sirienergy backend, where it can be stored, visualized, and analyzed.
+
+This connection enables users to:
+- Aggregate and analyze simulated data alongside real consumption data.
+
+- Test different self-sustainability strategies within the Sirienergy environment.
+
+- Export simulation results to the Sirienergy dashboard for unified reporting.
+
+To enable this connection, Yar must be configured with the appropriate API endpoint and authentication credentials provided in the graphical interface of the simulator
