@@ -16,16 +16,18 @@ MODULE_DEBUG = 1
 advice_bp = Blueprint("advice", __name__)
 redis_model = RedisModel()
 
+
 def hour_value_to_list(surplus):
     surplus_list = []
     for value in surplus.values():
         surplus_list.append(value)
     return surplus_list
 
+
 def get_money_advice(
     user_email: str, country: str, fee: str, fixed_value: int,
     has_battery: bool, battery_capacity_kwh: int
-    ) -> str:
+) -> str:
     try:
         existing_data = redis_model.get_user(user_email)
         if Config.DEBUG and MODULE_DEBUG and 1:
@@ -102,7 +104,7 @@ def get_money_advice(
             else:
                 return (
                     "Charge batteries",
-                    f"""You have a surplus of energy, you can charge fully your 
+                    f"""You have a surplus of energy, you can fully charge your 
                     batteries and consume the
                     {round(sum(surplus) - battery_capacity_kwh, 2)}
                     kWh you will have left."""
@@ -114,10 +116,11 @@ def get_money_advice(
                 avoid wasting it. If you have chores to do, do them now."""
             )
 
+
 def get_co2_advice(
     user_email: str,
     has_battery: bool, battery_capacity_kwh: int
-    ) -> str:
+) -> str:
     try:
         existing_data = redis_model.get_user(user_email)
         if Config.DEBUG and MODULE_DEBUG and 1:
@@ -172,7 +175,7 @@ def get_co2_advice(
             else:
                 return (
                     "Charge batteries",
-                    f"""You have a surplus of energy, you can charge fully your
+                    f"""You have a surplus of energy, you can fully charge your
                     batteries and consume the
                     {round(sum(surplus) - battery_capacity_kwh, 2)}
                     kWh you will have left."""
@@ -189,6 +192,7 @@ def get_co2_advice(
             """Your production will not cover your consumption, reduce your
             consumption to not get energy from the grid."""
         )
+
 
 @advice_bp.route("/get_advice", methods=["POST"])
 def get_advice():
@@ -245,6 +249,7 @@ def get_advice():
         )
 
     return html_content
+
 
 @advice_bp.route("/get_cons_peaks", methods=["POST"])
 def get_cons_peaks():

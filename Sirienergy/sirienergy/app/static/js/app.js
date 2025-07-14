@@ -713,7 +713,6 @@ async function getSurplus() {
     const surplusData = await surplusResponse.json();
     const peaksData = await peaksResponse.json();
 
-    // Check for errors in the response
     if (surplusData.error) {
       surplusCard.innerHTML = `<p class='error'>Error: ${surplusData.error}</p>`;
       return;
@@ -732,7 +731,12 @@ async function getSurplus() {
       value.toFixed(2)
     );
 
-    // Create a dataset with different colors for peak hours
+    // ✅ Find surplus hours
+    const surplusHours = hours.filter(
+      (hour, index) => parseFloat(surplusValues[index]) > 0
+    );
+
+    // Create dataset
     const dataset = hours.map((hour, index) => ({
       x: hour,
       y: surplusValues[index],
@@ -749,15 +753,56 @@ async function getSurplus() {
     surplusCard.appendChild(canvas);
 
     if (peakHours.length > 0) {
+      // ✅ Create a container for the icon and tooltip
+      const alarmContainer = document.createElement("div");
+      alarmContainer.style.position = "relative";
+      alarmContainer.style.display = "inline-block";
+      alarmContainer.style.right = "14px";
+      alarmContainer.style.top = "-22px";
+
+      // Create the icon
       const alarmIcon = document.createElement("div");
-      alarmIcon.textContent = "⚠️"; 
-      alarmIcon.title = "Consumption peaks detected. Make sure to move your energy consumption to the hours with surplus production.";
-      alarmIcon.style.position = "relative";
-      alarmIcon.style.top = "-22px";
-      alarmIcon.style.right = "14px";
+      alarmIcon.textContent = "⚠️";
       alarmIcon.style.fontSize = "40px";
-      alarmIcon.style.zIndex = "10";
-      surplusCard.appendChild(alarmIcon);
+      alarmIcon.style.cursor = "pointer";
+
+      // Create the tooltip box
+      const tooltipBox = document.createElement("div");
+      tooltipBox.textContent =
+        "Consumption peaks detected at: " +
+        peakHours.join(", ") +
+        "\nMove your consumption to surplus hours: " +
+        surplusHours.join(", ");
+
+      tooltipBox.style.visibility = "hidden";
+      tooltipBox.style.width = "250px";
+      tooltipBox.style.backgroundColor = "#555";
+      tooltipBox.style.color = "#fff";
+      tooltipBox.style.textAlign = "left";
+      tooltipBox.style.borderRadius = "6px";
+      tooltipBox.style.padding = "8px";
+      tooltipBox.style.position = "absolute";
+      tooltipBox.style.zIndex = "1";
+      tooltipBox.style.bottom = "110%"; // Position above icon
+      tooltipBox.style.left = "50%";
+      tooltipBox.style.marginLeft = "-125px"; // Center the tooltip
+      tooltipBox.style.opacity = "0";
+      tooltipBox.style.transition = "opacity 0.3s";
+
+      // Show tooltip on hover
+      alarmContainer.onmouseenter = () => {
+        tooltipBox.style.visibility = "visible";
+        tooltipBox.style.opacity = "1";
+      };
+      alarmContainer.onmouseleave = () => {
+        tooltipBox.style.visibility = "hidden";
+        tooltipBox.style.opacity = "0";
+      };
+
+      // Build
+      alarmContainer.appendChild(alarmIcon);
+      alarmContainer.appendChild(tooltipBox);
+      surplusCard.appendChild(alarmContainer);
     }
 
     new Chart(canvas, {
