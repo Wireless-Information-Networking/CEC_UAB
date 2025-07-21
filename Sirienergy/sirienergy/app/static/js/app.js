@@ -923,6 +923,20 @@ window.onload = function () {
     fixedvalueInputEl.value = storedData.fixedvalue || "";
     hasBatteryInputEl.checked = storedData.hasBattery || false;
     batteryEnergyInputEl.value = storedData.batteryEnergy || "";
+  } else {
+    // If no stored data, use default (example) data
+    emailInputEl.value = "example@uab.cat";
+    countryInputEl.value = "Spain";
+    latInputEl.value = "41.38"; // Barcelona latitude
+    lngInputEl.value = "2.17"; // Barcelona longitude
+    altInputEl.value = "12"; // Example altitude
+    timezoneInputEl.value = "Europe/Madrid"; // Example timezone
+    surfaceInputEl.value = "20"; // Example surface area in m²
+    efficiencyInputEl.value = "18"; // Example efficiency in %
+    feeInputEl.value = "MARKET"; // Example fee type
+    hasBatteryInputEl.checked = false; // Default to no battery
+    batteryEnergyInputEl.value = ""; // No battery energy by default
+    alert("Please complete user's form, for now we will use default values.");
   }
 
   if (
