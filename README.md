@@ -30,4 +30,4 @@ This connection enables users to:
 
 To enable this connection, Yar must be configured with the appropriate API endpoint and authentication credentials. This is done through the graphical interface of the simulator, where users must specify their Sirienergy login credentials. Once logged in, Yar will handle the authentication and secure communication with the Sirienergy API automatically.
 
-Additionally, in the ```YAR``` repository, a Python file named ```sirienergy_connection.py``` provides a clear example of how to interact programmatically with the Sirienergy API. This file serves both as a reference for developers and as a potential integration point for advanced users who want to automate or customize data exchange processes beyond the default behavior.
+Additionally, in the ```YAR``` repository, two Python files named ```create_client.py``` and ```siri_send_data.py```  provides a clear example of how to interact programmatically with the Sirienergy API. This files serve both as a reference for developers and as a potential integration point for advanced users who want to automate or customize data exchange processes beyond the default behavior.
