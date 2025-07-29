@@ -1,0 +1,7 @@
+numpy
+pandas
+matplotlib
+seaborn
+tqdm
+requests
+pvlib==0.12.0

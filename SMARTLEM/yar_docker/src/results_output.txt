@@ -1,0 +1,55 @@
+****************************************************************************************************
+Starting fast foward simulation...
+****************************************************************************************************
+Getting solar production data...
+Solar production data obtained correctly
+Getting total consumption data...
+Running fast foward simulation...
+File created with initial structure. House name:  John Doe's Smart House
+--------------------------------------------------
+Simulation started for John Doe's Smart House. Press Ctrl+C to stop.
+Type of simulation: fast_forward
+Initial temperature: 13.0°C, Humidity: 75.9%
+Updates every 300 seconds.
+Actions in minutes: True
+--------------------------------------------------
+Name of NPC: John Doe
+Age group: adult
+Name of NPC: Jane Doe
+Age group: adult
+Name of NPC: Kid Doe
+Age group: child
+--------------------------------------------------
+Simulating from 2024-01-01T00:00:00+01:00 to 2024-01-08T00:00:00+01:00
+--------------------------------------------------
+Simulation completed.
+Total electricity used: 69.92 kWh
+Total water used: 1748.67 liters
+Fast foward simulation completed correctly
+Total consumption data obtained correctly
+Getting solar grid consumption data...
+Number of common timestamps: 2016 found in get_solar_grid_consumption.
+Solar grid consumption data obtained correctly
+Getting battery data...
+Number of common timestamps in get_battery_data: 2016
+Battery data obtained correctly
+Getting device statistical data...
+Device statistical data obtained correctly
+Getting climate and environment sensors data...
+Error: APPID_AQ environment variable not set.
+Error: APPID_AQ environment variable not set.
+Climate and environment sensors data obtained correctly
+Generating output file...
+Generating output with 2016 common timestamps.
+Generated output file: ./sim_result/john_doe's_smart_house_output.json
+Output file generated correctly
+Simulation completed successfully!
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total energy used: 69.921625 kWh
+Average daily energy: 9.99 kWh/day
+
+Comparison with real-life averages:
+Energy usage is within expected range (63.0-70.0 kWh).
+
+Accuracy assessment:
+Energy accuracy: 94.85%
