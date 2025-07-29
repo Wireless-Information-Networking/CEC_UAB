@@ -5,6 +5,11 @@ Yar is an open-source Electron application dedicated to designing, simulating, a
 
 The Yar Smart House Simulator is a desktop application designed to simulate and monitor a smart home environment. It generates real-time data for energy management, water usage, and climate conditions, presenting this data through an interactive dashboard. The application is built using Electron for the frontend (with a web-based dashboard) and Python for the backend simulation logic. The dashboard provides insights into metrics like energy consumption, solar production, battery status, water usage, and climate conditions, with options to filter data by time range and export the dashboard in multiple formats.
 
+### Simulation Modes
+The simulator offers two distinct simulation modes to meet different use cases:
+ - **Real-Time Mode**: Simulates smart home data in real-time, generating data points continuously as time progresses. This mode is ideal for live monitoring demonstrations and testing real-time dashboard updates.
+- **Fast-Forward Mode**: Allows users to specify a particular time period and generate simulation data for that entire period quickly. This mode is perfect for generating historical data, testing different scenarios, or creating comprehensive datasets for analysis without waiting for real-time progression.
+
 ### Purpose
 The simulator aims to:
 - Simulate realistic smart home data for testing and demonstration purposes.
