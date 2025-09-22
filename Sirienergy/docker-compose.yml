@@ -6,26 +6,106 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-      - ./common/auth_keys.csv:/etc/nginx/auth_keys.csv
-      - ./nginx/validation.lua:/etc/nginx/validation.lua
-      - ./ssl/sirienergy/server.key:/etc/nginx/ssl/private/server.key
-      - ./ssl/sirienergy/sirienergy_uab_cat.pem:/etc/nginx/ssl/private/sirienergy_uab_cat.pem
-    depends_on:
-      - redis
-      - sirienergy
+      - ./nginx/ssl/server.key:/etc/nginx/ssl/private/server.key
+      - ./nginx/ssl/sirienergy_uab_cat.pem:/etc/nginx/ssl/private/sirienergy_uab_cat.pem
     container_name: nginx_proxy
 
   redis:
     image: redislabs/rejson:latest
-    container_name: redisjson
     ports:
       - "6379:6379"
+    container_name: redisjson
 
   sirienergy:
     build:
       context: ./sirienergy
-    container_name: sirienergy
     volumes:
-      - ./sirienergy:/usr/src/app
+      - ./sirienergy/app.py:/app/app.py
+      - ./sirienergy/templates:/app/templates
+      - ./sirienergy/static:/app/static
+    container_name: sirienergy
+
+  test_ms1:
+    build:
+      context: ./test_ms1
+    volumes:
+      - ./test_ms1/app.py:/app/app.py
+    container_name: test_ms1
+
+  weather:
+    build:
+      context: ./weather
+    volumes:
+      - ./weather/app.py:/app/app.py
+      - ./weather/templates:/app/templates
+      - ./weather/static:/app/static
     env_file:
-      - ./sirienergy/.env
+      - .env
+    container_name: weather
+
+  entsoe_prices:
+    build:
+      context: ./entsoe_prices
+    volumes:
+      - ./entsoe_prices/app.py:/app/app.py
+      - ./common_files/entsoe:/app/common_files/entsoe
+    env_file:
+      - .env
+    container_name: entsoe_prices
+
+  entsoe_gentype:
+    build:
+      context: ./entsoe_gentype
+    volumes:
+      - ./entsoe_gentype/app.py:/app/app.py
+      - ./common_files/entsoe:/app/common_files/entsoe
+    env_file:
+      - .env
+    container_name: entsoe_gentype
+
+  pvlib_production:
+    build:
+      context: ./pvlib_production
+    volumes:
+      - ./pvlib_production/app.py:/app/app.py
+    container_name: pvlib_production
+
+  selling_prices:
+    build:
+      context: ./selling_prices
+    volumes:
+      - ./selling_prices/app.py:/app/app.py
+      - ./common_files/entsoe:/app/common_files/entsoe
+    env_file:
+      - .env
+    container_name: selling_prices
+
+  users:
+    build:
+      context: ./users
+    volumes:
+      - ./users/app.py:/app/app.py
+    env_file:
+      - .env
+    container_name: users
+
+  user_data:
+    build:
+      context: ./user_data
+    volumes:
+      - ./user_data/app.py:/app/app.py
+    env_file:
+      - .env
+    container_name: user_data
+
+  advice:
+    build:
+      context: ./advice
+    volumes:
+      - ./advice/app.py:/app/app.py
+      - ./advice/templates:/app/templates
+      - ./common_files/entsoe:/app/common_files/entsoe
+    env_file:
+      - .env
+    container_name: advice
+

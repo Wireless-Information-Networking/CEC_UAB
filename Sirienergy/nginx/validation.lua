@@ -25,18 +25,6 @@ if ngx.req.get_method() ~= "POST" then
     return ngx.exit(ngx.HTTP_NOT_ALLOWED)
 end
 
--- Load API keys from CSV
-local api_keys = read_csv("/etc/nginx/auth_keys.csv")
-
--- Validate the API-Key header
-local api_key = ngx.req.get_headers()["API-Key"]
-if not api_key or not api_keys[api_key] then
-    ngx.status = ngx.HTTP_FORBIDDEN
-    ngx.header.content_type = "application/json"
-    ngx.say('{"error": "Unauthorized", "message": "Missing or invalid API Key"}')
-    return ngx.exit(ngx.HTTP_FORBIDDEN)
-end
-
 -- Validate the Content-Type header
 local content_type = ngx.req.get_headers()["Content-Type"]
 if not content_type or not string.find(content_type, "application/json") then
