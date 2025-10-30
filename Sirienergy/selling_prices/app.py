@@ -75,6 +75,8 @@ def get_day_ahead_prices(
     data_xml = response.text
     data_dict = xmltodict.parse(data_xml)
     data_json = json.loads(json.dumps(data_dict))
+    
+    logging.error(f"data json: {data_json}")
 
     if response.status_code == 200:
 
@@ -84,10 +86,10 @@ def get_day_ahead_prices(
 
         if isinstance(time_series_list, list):
             for time_series in time_series_list:
-                if time_series["Period"]["resolution"] == "PT60M":
+                if time_series["Period"]["resolution"] == "PT15M":
                     points = time_series["Period"]["Point"]
                     break
-        elif time_series_list["Period"]["resolution"] == "PT60M":
+        elif time_series_list["Period"]["resolution"] == "PT15M":
             points = time_series_list["Period"]["Point"]
         else:
             logging.info("Incorrect format: %s", time_series_list)
@@ -145,10 +147,10 @@ def get_price_array(
         fixed_value: The fixed price value if type is "FIXED". Defaults to 0.0.
 
     Returns:
-        A price array of length 24, or None if an error occurs.
+        A price array of length 96, or None if an error occurs.
     """
     if price_type == "FIXED":
-        return [fixed_value] * 24
+        return [fixed_value] * 96
     elif price_type == "MARKET":
         prices_dict = get_day_ahead_prices(country_name)
         if prices_dict is None:
@@ -191,7 +193,7 @@ def get_PV_gen(
     times = pd.date_range(
         start=datetime(2024, 9, 21, 0),
         end=datetime(2024, 9, 21, 23, 59),
-        freq='1h',
+        freq='15min',
         tz=tz
     )
 
@@ -262,11 +264,13 @@ def selling_prices():
         tz = data["timezone"]
         country = data["country"]
         fee = data["fee"]
-        fixed_value = data["fixed_price"]
+        fixed_value = float(data["fixed_price"])
 
         price_array = get_price_array(country, fee, fixed_value)
         power_array = get_PV_gen(latitude, longitude, altitude, surface,
                                  efficiency, tz)
+
+        logging.error(price_array, power_array)
 
         power_array = [round(value / 1000, 5) for value in power_array]
 

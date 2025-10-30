@@ -14,6 +14,8 @@ import xmltodict
 
 app = Flask(__name__, template_folder='templates')
 
+logging.basicConfig(level=logging.DEBUG)	
+
 ENTSO_E_API_KEY = os.getenv('ENTSO_E_API_KEY')
 
 def hash_password(password: str) -> str:
@@ -218,8 +220,18 @@ def get_surplus_aux(user_email):
         dict: Dictionary of hourly surplus values (production - consumption).
     """
     current_date = datetime.now().strftime("%Y-%m-%d")
-    consumption = redis_model.get_consumption_day(user_email, current_date)[0]
-    production = redis_model.get_production_day(user_email, current_date)[0]
+    
+    logging.debug(f"surplus current date: {current_date}")
+    
+    
+    # Retrieve data lists from Redis
+    consumption_list = redis_model.get_consumption_day(user_email, current_date)
+    production_list = redis_model.get_production_day(user_email, current_date)
+
+    # Check if the lists are empty before accessing the first element
+    # Use an empty dictionary if no data is found
+    consumption = consumption_list[0] if consumption_list else {}
+    production = production_list[0] if production_list else {}
 
     ordered_consumption = complete_and_order_hours(consumption)
     ordered_production = complete_and_order_hours(production)
@@ -302,10 +314,10 @@ def get_day_ahead_prices(
 
         if isinstance(time_series_list, list):
             for time_series in time_series_list:
-                if time_series["Period"]["resolution"] == "PT60M":
+                if time_series["Period"]["resolution"] == "PT15M":
                     points = time_series["Period"]["Point"]
                     break
-        elif time_series_list["Period"]["resolution"] == "PT60M":
+        elif time_series_list["Period"]["resolution"] == "PT15M":
             points = time_series_list["Period"]["Point"]
         else:
             logging.info("Incorrect format: %s", time_series_list)
@@ -390,6 +402,9 @@ def sell_by_hours(
         A list of revenue values per hour, or None if arrays have different 
         lengths.
     """
+    
+    price_array = [float(p) if isinstance(p, str) and p.strip() != '' else (p if isinstance(p, (int, float)) else 0.0) for p in price_array]
+
     if len(price_array) != len(gen_array):
         logging.error("Arrays must have the same length. Got %s vs %s",
                       len(price_array), len(gen_array))
@@ -417,8 +432,14 @@ def get_money_advice(
     # Get price array
     price_list = get_price_array(country, fee, fixed_value)
 
-    rent = sell_by_hours(price_list, surplus)
+    logging.error(f"price list : {price_list}")
+    logging.error(f"surplus : {surplus}")
 
+    if len(price_list) == 96:
+	      price_list = price_list[::4]
+
+    rent = sell_by_hours(price_list, surplus)
+    
     profit = sum(rent)
 
     if profit > 0:
@@ -503,10 +524,13 @@ def get_advice():
     # Get necessary data
     try:
         data = request.json
+        
+        logging.debug(f"Received advice request data: {data}")
+
         user_email = data["email"]
         country = data["country"]
         fee = data["fee"]
-        fixed_value = data["fixed_price"]
+        fixed_value = float(data["fixed_price"])
         has_battery = data["has_battery"]
         battery_capacity_kwh = float(data["battery_capacity"])
 

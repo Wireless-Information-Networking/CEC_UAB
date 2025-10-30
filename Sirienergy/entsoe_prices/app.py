@@ -70,9 +70,12 @@ def get_day_ahead_prices(
     }
 
     response = requests.get(endpoint, params=params, timeout=30)
+    logging.info(f"Resposta: {response}")
     data_xml = response.text
     data_dict = xmltodict.parse(data_xml)
     data_json = json.loads(json.dumps(data_dict))
+    logging.info(f"Canvi JSON")
+    logging.info(f"Resposta JSON: {data_json}")
 
     if response.status_code == 200:
 
@@ -82,10 +85,12 @@ def get_day_ahead_prices(
 
         if isinstance(time_series_list, list):
             for time_series in time_series_list:
-                if time_series["Period"]["resolution"] == "PT60M":
+                if time_series["Period"]["resolution"] == "PT15M":
+                    logging.info(f"entra bucle")
                     points = time_series["Period"]["Point"]
+                    logging.info(f"Points: {points}")
                     break
-        elif time_series_list["Period"]["resolution"] == "PT60M":
+        elif time_series_list["Period"]["resolution"] == "PT15M":
             points = time_series_list["Period"]["Point"]
         else:
             logging.info("Incorrect format: %s", time_series_list)

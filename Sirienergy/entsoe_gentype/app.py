@@ -71,8 +71,10 @@ def get_actual_generation_by_type(country_name: str
     yesterday_datetime = current_datetime - timedelta(days=1)
     current_formatted = current_datetime.strftime("%Y%m%d") + "2200"
     yesterday_formatted = yesterday_datetime.strftime("%Y%m%d") + "2200"
+    
 
     entsoe_country_keys = load_entsoe_country_keys()
+    #logging.error(f"Available countries are: {list(entsoe_country_keys.keys())}")
     if country_name not in entsoe_country_keys:
         logging.error("Key for country %s not found", country_name)
         return None
@@ -109,28 +111,59 @@ def get_actual_generation_by_type(country_name: str
     date_format = "%Y-%m-%dT%H:%MZ"
 
     if time_series_list:
+        if not isinstance(time_series_list, list):
+            time_series_list = [time_series_list]
+        
         for time_series in time_series_list:
-            update_time_str = time_series["Period"]["timeInterval"]["end"]
+            # Normalize Period
+            period = time_series["Period"]
+            if isinstance(period, list):
+                period = period[-1]  # Use last period
+            
+            update_time_str = period["timeInterval"]["end"]
             update_time = datetime.strptime(update_time_str, date_format)
             if update_time > last_up_time:
                 last_up_time = update_time
+
 
         last_up_time_str = last_up_time.strftime(date_format)
         entsoe_gentype_names = load_entsoe_gentype_names()
 
         for time_series in time_series_list:
-            if last_up_time_str == time_series["Period"]["timeInterval"]["end"]:
-                gentype = entsoe_gentype_names[time_series["MktPSRType"]
-                                               ["psrType"]]
+            # ADD THESE 3 LINES:
+            period = time_series["Period"]
+            if isinstance(period, list):
+                period = period[-1]
+            
+            # CHANGE THIS LINE:
+            if last_up_time_str == period["timeInterval"]["end"]:  # Changed from time_series["Period"]
+            
+                psr_type = time_series["MktPSRType"]["psrType"]
+        
+                # Skip unknown generation types
+                if psr_type not in entsoe_gentype_names:
+                    logging.warning(f"Unknown psrType: {psr_type} - skipping")
+                    continue
+            
+                gentype = entsoe_gentype_names[psr_type]
+                
+                # Normalize Point to always be a list
+                points = period["Point"]  # CHANGED from time_series["Period"]["Point"]
+                if not isinstance(points, list):
+                    points = [points]
+
                 if "inBiddingZone_Domain.mRID" in time_series:
-                    gens[gentype] = int(time_series["Period"]["Point"]
-                                        [-1]["quantity"])
+                    # Get the last point's quantity
+                    gens[gentype] = int(float(points[-1]["quantity"])) #hello
                 else:
                     gens[gentype] = gens.get(gentype, 0)
 
         gens = {key: value for key, value in gens.items() if value != 0}
     else:
         logging.info("No valid time series data found.")
+        
+    logging.info(f"Returning generation data for {country_name}: {gens}")
+
 
     return gens
 
@@ -176,16 +209,17 @@ def get_co2_from_dict(
     return sum(value * co2_dict.get(key, 0.0) for key, value in
                power_dict.items())
 
-
+        
 @app.route('/entsoe_gentype', methods=['POST'])
 def entsoe_gentype():
     """Retrieves actual generation mix and CO2 emissions for a country.
-
+    
     Returns:
         JSON response with generation data and CO2 emissions:
         - 400 if country parameter is missing
         - 500 if API request or calculation fails
         - 200 with data on success
+    
     """
     data = request.get_json()
     if 'country' not in data:
@@ -193,20 +227,29 @@ def entsoe_gentype():
 
     try:
         generation = get_actual_generation_by_type(data['country'])
-        if 'error' in generation:
-            return jsonify(generation), 500
+        
+        # Check for None before using the result
+        if generation is None:
+            return jsonify({'error': 'Failed to retrieve generation data'}), 500
 
         co2_dict = load_co2_by_type()
+        logging.info(f"CO2 dict loaded successfully for {data['country']}")  # ADD THIS
+        
         co2 = get_co2_from_dict(generation, co2_dict)
+        logging.info(f"CO2 calculated: {co2}")  # ADD THIS
 
         return jsonify({
             'data': generation,
             'co2': co2
         }), 200
     except ValueError as error:
-        return jsonify({'error': str(error)}), 400
+      logging.error(f"ValueError occurred: {error}", exc_info=True)  # ADD exc_info=True
+      return jsonify({'error': str(error)}), 400
+
     except Exception as error:
+        logging.exception("Unexpected error in entsoe_gentype")
         return jsonify({'error': str(error)}), 500
+
 
 
 if __name__ == '__main__':

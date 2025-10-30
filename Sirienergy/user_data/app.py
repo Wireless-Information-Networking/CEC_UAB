@@ -10,6 +10,37 @@ import hashlib
 
 app = Flask(__name__)
 
+def get_latest_available_date(user_email: str, data_type: str = "user_consumption") -> str:
+    """Find the most recent date with data for a user."""
+    user_data = redis_model.get_user(user_email)
+    if user_data and data_type in user_data and user_data[data_type]:
+        dates = sorted(user_data[data_type].keys(), reverse=True)
+        return dates[0] if dates else None
+    return None
+
+def get_best_available_date(user_email: str, data_type: str = "user_consumption") -> str:
+    """Get today's date if data exists, otherwise fall back to most recent date."""
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Check if today has data
+    if data_type == "user_consumption":
+        today_data = redis_model.get_consumption_day(user_email, current_date)[0]
+    else:
+        today_data = redis_model.get_production_day(user_email, current_date)[0]
+    
+    # If today has non-zero data, use it
+    if today_data and any(v != 0 for v in today_data.values()):
+        return current_date
+    
+    # Otherwise, fall back to most recent available date
+    latest_date = get_latest_available_date(user_email, data_type)
+    if latest_date:
+        sys.stderr.write(f"[INFO] No data for {current_date}, using latest: {latest_date}\n")
+        return latest_date
+    
+    return current_date
+
+
 def hash_password(password: str) -> str:
     """Hashes a password using SHA-256.
 
@@ -136,34 +167,45 @@ class RedisModel:
         json_data = self.client.execute_command("JSON.GET", key)
         return json.loads(json_data) if json_data else None
 
-    def get_data_day(self, user_email: str, date: str, data_type: str) -> dict:
+    def get_data_day(self, user_email: str, date: str, data_type: str) -> list:
         """Retrieves consumption or production records for a user on a date.
 
         Args:
             user_email: The user's email (used as a unique key).
             date: The date of the record.
             data_type: Either "user_consumption" or "user_production".
-
+    
         Returns:
-            A dictionary with the data for the specified date or an empty
-            structure if no data exists.
+            A list containing the data dictionary for the specified date,
+            or a list with an empty dict if no data exists.
         """
         if data_type not in {"user_consumption", "user_production"}:
             raise ValueError(
                 """Invalid data type. Must be 'user_consumption'
                   or 'user_production'."""
             )
-
+    
         key = f"user:{user_email}"
         date_path = f"$.{data_type}.{date}"
         try:
-            existing_data = self.client.execute_command("JSON.GET", key,
-                                                        date_path)
-            data_json = json.loads(existing_data) if existing_data else {}
-            return data_json
+            existing_data = self.client.execute_command("JSON.GET", key, date_path)
+            
+            # Parse the JSON response
+            if existing_data:
+                data_json = json.loads(existing_data)
+                # If Redis returns an empty array [], return [{}] instead
+                if not data_json or (isinstance(data_json, list) and len(data_json) == 0):
+                    return [{}]
+                # Ensure it's a list
+                if not isinstance(data_json, list):
+                    data_json = [data_json]
+                return data_json
+            else:
+                return [{}]
+                
         except redis.RedisError as error:
             raise ValueError(f"""Failed to retrieve {data_type} for {date}:
-                              {error}""")
+                          {error}""")
 
     def add_consumption(
         self, user_email: str, date: str, hour: str, value: float
@@ -217,7 +259,7 @@ def get_surplus_aux(user_email):
     Returns:
         dict: Dictionary of hourly surplus values (production - consumption).
     """
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    current_date = get_best_available_date(user_email, "user_consumption")
     consumption = redis_model.get_consumption_day(user_email, current_date)[0]
     production = redis_model.get_production_day(user_email, current_date)[0]
 
@@ -247,8 +289,8 @@ def get_production():
         if existing_data is None:
             return jsonify({"error": "User not registered"}), 400
 
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        response = redis_model.get_production_day(user_email, current_date)[0]
+        query_date = get_best_available_date(user_email, "user_production")
+        response = redis_model.get_production_day(user_email, query_date)[0]
         ordered_response = complete_and_order_hours(response)
 
         sys.stderr.write(
@@ -277,8 +319,8 @@ def get_consumption():
         if existing_data is None:
             return jsonify({"error": "User not registered"}), 400
 
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        response = redis_model.get_consumption_day(user_email, current_date)[0]
+        query_date = get_best_available_date(user_email, "user_consumption")
+        response = redis_model.get_consumption_day(user_email, query_date)[0]
         ordered_response = complete_and_order_hours(response)
 
         sys.stderr.write(
@@ -317,29 +359,66 @@ def get_cons_peaks():
     try:
         data = request.json
         user_email = data["email"]
-
     except KeyError as e:
         return jsonify({"error": f"Missing key: {str(e)}"}), 400
 
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    consumption = redis_model.get_consumption_day(user_email, current_date)[0]
+    try:
+        existing_data = redis_model.get_user(user_email)
+        if existing_data is None:
+            return jsonify({"error": "User not registered"}), 400
 
-    if consumption is None:
-        return jsonify({"error": "User not registered"}), 400
+        query_date = get_best_available_date(user_email, "user_consumption")
+        consumption = redis_model.get_consumption_day(user_email, query_date)[0]
 
-    consumption = hour_value_to_list(consumption)
+        # Convert to list
+        consumption_list = hour_value_to_list(consumption)
+        
+        # Check if consumption data exists and has non-zero values
+        if not consumption_list or sum(consumption_list) == 0:
+            return jsonify({"peak_hours": []}), 200
 
-    consumption_mean = sum(consumption) / len(consumption)
+        consumption_mean = sum(consumption_list) / len(consumption_list)
 
-    surplus = get_surplus_aux(user_email)
+        surplus = get_surplus_aux(user_email)
 
-    peak_hours = []
-    threshold = -1 * consumption_mean
-    for key, value in surplus.items():
-        if value < threshold:
-            peak_hours.append(key)
+        peak_hours = []
+        threshold = -1 * consumption_mean
+        for key, value in surplus.items():
+            if value < threshold:
+                peak_hours.append(key)
 
-    return jsonify({"peak_hours": peak_hours}), 200
+        return jsonify({"peak_hours": peak_hours}), 200
+        
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except ZeroDivisionError:
+        return jsonify({"peak_hours": []}), 200
+        
+@app.route("/debug/user_keys", methods=["POST"])
+def debug_user_keys():
+    """Debug endpoint to see all data for a user."""
+    try:
+        data = request.json
+        user_email = data["email"]
+        
+        # Get the entire user document
+        key = f"user:{user_email}"
+        user_data = redis_model.client.execute_command("JSON.GET", key)
+        
+        if user_data:
+            parsed = json.loads(user_data)
+            return jsonify({
+                "consumption_dates": list(parsed.get("user_consumption", {}).keys()),
+                "production_dates": list(parsed.get("user_production", {}).keys()),
+                "full_data": parsed
+            }), 200
+        else:
+            return jsonify({"error": "User not found"}), 404
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5008)

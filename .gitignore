@@ -3,3 +3,5 @@ venv/*
 
 #ignore all test files
 test/*
+Sirienergy/nginx/nginx.conf
+Sirienergy/nginx/nginx.conf

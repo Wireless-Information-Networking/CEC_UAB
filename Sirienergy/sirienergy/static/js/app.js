@@ -1,4 +1,4 @@
-// Create constants for the form and input elements
+//Create constants for the form and input elements
 const pvFormEl = document.getElementById("user-form");
 const countryInputEl = document.getElementById("country-select");
 const latInputEl = document.getElementById("lat");
@@ -112,12 +112,15 @@ async function getPrices() {
         const labels = []; // X-axis labels (00:00 to 23:00)
         const prices = []; // Y-axis data (euros/MWh)
 
+                // This is the NEW, correct block
         data.data.forEach((point) => {
-          // Assuming point.position is from 1 to 24 (representing each hour)
-          const hour = (point.position - 1).toString().padStart(2, "0"); // Format hour as "HH"
-          labels.push(`${hour}:00`); // X-axis label (hour in "HH:00" format)
-          prices.push(point["price.amount"]); // Y-axis value (euros/MWh)
+          const totalMinutes = (point.position - 1) * 15;
+          const hour = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
+          const minutes = (totalMinutes % 60).toString().padStart(2, "0");
+          labels.push(`${hour}:${minutes}`);
+          prices.push(point["price.amount"]);
         });
+
 
         // Create a canvas for the chart
         const canvas = document.createElement("canvas");
@@ -510,11 +513,13 @@ async function getSell() {
     const canvas = document.createElement("canvas");
     PVGenCard.appendChild(canvas);
 
-    // Prepare data for the line chart
-    const hours = Array.from(
-      { length: 24 },
-      (_, i) => `${String(i).padStart(2, "0")}:00`
-    ); // Format hours as HH:00
+        // This is the NEW, correct block
+    const hours = Array.from({ length: 96 }, (_, i) => {
+      const totalMinutes = i * 15;
+      const hour = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
+      const minutes = (totalMinutes % 60).toString().padStart(2, "0");
+      return `${hour}:${minutes}`;
+    });
     const powerData = powerArray.map((powerValue) => powerValue.toFixed(2));
 
     // Create the line chart using Chart.js
