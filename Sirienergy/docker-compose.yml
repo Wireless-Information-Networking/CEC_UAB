@@ -19,6 +19,8 @@ services:
   sirienergy:
     build:
       context: ./sirienergy
+    ports:
+      - "5000:5000"
     volumes:
       - ./sirienergy/app.py:/app/app.py
       - ./sirienergy/templates:/app/templates
@@ -28,6 +30,8 @@ services:
   test_ms1:
     build:
       context: ./test_ms1
+    ports:
+      - "5001:5001"
     volumes:
       - ./test_ms1/app.py:/app/app.py
     container_name: test_ms1
@@ -35,6 +39,8 @@ services:
   weather:
     build:
       context: ./weather
+    ports:
+      - "5002:5002"
     volumes:
       - ./weather/app.py:/app/app.py
       - ./weather/templates:/app/templates
@@ -46,6 +52,8 @@ services:
   entsoe_prices:
     build:
       context: ./entsoe_prices
+    ports:
+      - "5003:5003"
     volumes:
       - ./entsoe_prices/app.py:/app/app.py
       - ./common_files/entsoe:/app/common_files/entsoe
@@ -56,6 +64,8 @@ services:
   entsoe_gentype:
     build:
       context: ./entsoe_gentype
+    ports:
+      - "5004:5004"
     volumes:
       - ./entsoe_gentype/app.py:/app/app.py
       - ./common_files/entsoe:/app/common_files/entsoe
@@ -66,6 +76,8 @@ services:
   pvlib_production:
     build:
       context: ./pvlib_production
+    ports:
+      - "5005:5005"
     volumes:
       - ./pvlib_production/app.py:/app/app.py
     container_name: pvlib_production
@@ -73,6 +85,8 @@ services:
   selling_prices:
     build:
       context: ./selling_prices
+    ports:
+      - "5006:5006"
     volumes:
       - ./selling_prices/app.py:/app/app.py
       - ./common_files/entsoe:/app/common_files/entsoe
@@ -83,8 +97,12 @@ services:
   users:
     build:
       context: ./users
+    ports:
+      - "5007:5007"
     volumes:
       - ./users/app.py:/app/app.py
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     env_file:
       - .env
     container_name: users
@@ -92,15 +110,21 @@ services:
   user_data:
     build:
       context: ./user_data
+    ports:
+      - "5008:5008"
     volumes:
       - ./user_data/app.py:/app/app.py
     env_file:
       - .env
     container_name: user_data
+    depends_on:
+      - redis
 
   advice:
     build:
       context: ./advice
+    ports:
+      - "5009:5009"  
     volumes:
       - ./advice/app.py:/app/app.py
       - ./advice/templates:/app/templates
@@ -108,4 +132,5 @@ services:
     env_file:
       - .env
     container_name: advice
+
 
