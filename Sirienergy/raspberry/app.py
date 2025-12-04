@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 import paho.mqtt.client as mqtt
 
-# ================= Configuration =================
+# ================= Configuration ==================
 MQTT_BROKER = '158.109.75.3'   #the IP from the victron raspberry
 MQTT_PORT = 1883
 
@@ -23,7 +23,7 @@ TOPIC_PRODUCTION = "solarcharger/288/Yield/Power"
 
 SAMPLING_INTERVAL = 30  #every 30s will read the datas one time
 REPORT_INTERVAL_MINUTES = 15  #every 15 minutes will restore the datas
-# =================================================
+# ==================================================
 
 app = Flask(__name__)
 
