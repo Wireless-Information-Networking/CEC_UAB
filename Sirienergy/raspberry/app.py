@@ -10,20 +10,20 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 import paho.mqtt.client as mqtt
 
-# ================= Configuration ==================
-MQTT_BROKER = '158.109.75.3'   #the IP from the victron raspberry
+# ================= Configuration =================
+MQTT_BROKER = '158.109.75.3'
 MQTT_PORT = 1883
 
-TARGET_EMAIL = "example@uab.cat"  #already register this e-mail
+TARGET_EMAIL = "example@uab.cat" 
 
-
+# Topic
 TOPIC_CONSUMPTION = "inverter/289/Ac/Out/L1/S" 
 TOPIC_PRODUCTION = "solarcharger/288/Yield/Power"
 
-
-SAMPLING_INTERVAL = 30  #every 30s will read the datas one time
-REPORT_INTERVAL_MINUTES = 15  #every 15 minutes will restore the datas
-# ==================================================
+SAMPLING_INTERVAL = 30       
+REPORT_INTERVAL_MINUTES = 15 
+DATA_TIMEOUT = 900
+# =================================================
 
 app = Flask(__name__)
 
@@ -96,104 +96,190 @@ current_power = {
     "production": 0.0
 }
 
+last_update_time = {
+    "consumption": time.time(),
+    "production": time.time()
+}
+
 energy_buffer = {
     "consumption": 0.0,
     "production": 0.0,
     "last_saved_minute": -1 
 }
 
+ghost_energy = {
+    "consumption": 0.0,
+    "production": 0.0
+}
+
+portal_id = None
+
+def keep_alive_worker(client, pid):
+    topic = f"R/{pid}/system/0/Serial"
+    print(f"[Keep-Alive] Started for Portal ID: {pid}. Sending heartbeat to {topic}", flush=True)
+    while True:
+        try:
+            client.publish(topic, payload="")
+        except Exception as e:
+            print(f"[Keep-Alive] Error: {e}", flush=True)
+        time.sleep(50) 
+
+def start_keep_alive(client, pid):
+    t = threading.Thread(target=keep_alive_worker, args=(client, pid), daemon=True)
+    t.start()
+
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print(f"[MQTT] Connected! Sampling {SAMPLING_INTERVAL}s, Reporting {REPORT_INTERVAL_MINUTES}m...", flush=True)
+        print(f"[MQTT] Connected! Subscribing to N/# ...", flush=True)
         client.subscribe("N/#")
     else:
         print(f"[MQTT] Connection failed code: {rc}", flush=True)
 
+def on_disconnect(client, userdata, rc):
+    if rc != 0:
+        print(f"?? [MQTT] Unexpected disconnection (RC={rc}). Auto-reconnect enabled.", flush=True)
+    else:
+        print(f"[MQTT] Disconnected cleanly.", flush=True)
+
 def on_message(client, userdata, msg):
-    global current_power
+    global current_power, last_update_time, portal_id
     topic = msg.topic
     
+    topic_parts = topic.split('/')
+    if len(topic_parts) > 1 and portal_id is None:
+        possible_id = topic_parts[1]
+        if len(possible_id) > 5:
+            portal_id = possible_id
+            print(f"?? [System] Found Portal ID: {portal_id}", flush=True)
+            start_keep_alive(client, portal_id)
+
     if TOPIC_CONSUMPTION not in topic and TOPIC_PRODUCTION not in topic:
         return
 
     try:
         payload = json.loads(msg.payload.decode('utf-8'))
-        
         if 'value' not in payload: return
         
         raw_val = payload['value']
-        
         if raw_val is None:
             val = 0.0
         else:
             val = float(raw_val)
         
+        current_time = time.time()
+
         if TOPIC_CONSUMPTION in topic:
             current_power["consumption"] = val
+            last_update_time["consumption"] = current_time
+            
         elif TOPIC_PRODUCTION in topic:
             current_power["production"] = val
+            last_update_time["production"] = current_time
             
     except Exception as e:
         print(f"[MQTT Error] {e}", flush=True)
 
 def background_energy_calculator():
-    global energy_buffer, current_power
+    global energy_buffer, current_power, last_update_time, ghost_energy
     
-    print(f"[Background] Calculator Started. Reporting every {REPORT_INTERVAL_MINUTES}m", flush=True)
+    print(f"[Background] Calculator Started.", flush=True)
 
     while True:
-        time.sleep(SAMPLING_INTERVAL)
+        try:
+            time.sleep(SAMPLING_INTERVAL)
 
-        time_factor = SAMPLING_INTERVAL / 3600.0
-        
-        inc_cons = current_power["consumption"] * time_factor
-        inc_prod = current_power["production"] * time_factor
-        
-        energy_buffer["consumption"] += inc_cons
-        energy_buffer["production"] += inc_prod
-        
-        now = datetime.now()
-        current_minute = now.minute
-        
-        is_report_time = (current_minute % REPORT_INTERVAL_MINUTES == 0)
-        
-        if is_report_time and (current_minute != energy_buffer["last_saved_minute"]):
-            
-            target_date = now
-            if current_minute == 0:
-                target_date = now - timedelta(minutes=1)
-            
-            current_date_str = target_date.strftime("%Y-%m-%d")
-            current_hour_str = target_date.strftime("%H:00") 
-            
-            print(f"\n[Auto-Save {now.strftime('%H:%M')}] Flushing to Key: {current_hour_str}...", flush=True)
-            print(f" -> Buffer Status: Cons={energy_buffer['consumption']:.4f} Wh, Prod={energy_buffer['production']:.4f} Wh", flush=True)
+            time_factor = SAMPLING_INTERVAL / 3600.0
+            current_ts = time.time()
             
             # --- Consumption ---
-            cons_val = energy_buffer["consumption"]
-            if cons_val >= 0: 
-                try:
-                    redis_model.add_consumption(TARGET_EMAIL, current_date_str, current_hour_str, cons_val)
-                    print(f"   -> [SAVED] Consumption: {cons_val:.4f} Wh", flush=True)
-                except Exception as e:
-                    print(f"   -> Error saving cons: {e}", flush=True)
+            staleness_cons = current_ts - last_update_time["consumption"]
             
+            if staleness_cons > DATA_TIMEOUT:
+                if ghost_energy["consumption"] > 0:
+                    print(f"?? [Rollback] Cons idle for {int(staleness_cons)}s. Removing {ghost_energy['consumption']:.4f} Wh ghost data.", flush=True)
+                    energy_buffer["consumption"] -= ghost_energy["consumption"]
+                    if energy_buffer["consumption"] < 0: energy_buffer["consumption"] = 0.0
+                    ghost_energy["consumption"] = 0.0
+                
+                p_cons = 0.0
+            else:
+                p_cons = current_power["consumption"]
+                inc = p_cons * time_factor
+                if staleness_cons < (SAMPLING_INTERVAL + 5):
+                    ghost_energy["consumption"] = 0.0
+                else:
+                    ghost_energy["consumption"] += inc
+                energy_buffer["consumption"] += inc
+
             # --- Production ---
-            prod_val = energy_buffer["production"]
-            if prod_val >= 0:
-                try:
-                    redis_model.add_production(TARGET_EMAIL, current_date_str, current_hour_str, prod_val)
-                    print(f"   -> [SAVED] Production: {prod_val:.4f} Wh", flush=True)
-                except Exception as e:
-                    print(f"   -> Error saving prod: {e}", flush=True)
+            staleness_prod = current_ts - last_update_time["production"]
             
-            energy_buffer["consumption"] = 0.0
-            energy_buffer["production"] = 0.0
-            energy_buffer["last_saved_minute"] = current_minute
+            if staleness_prod > DATA_TIMEOUT:
+                if ghost_energy["production"] > 0:
+                    print(f"?? [Rollback] Prod idle for {int(staleness_prod)}s. Removing {ghost_energy['production']:.4f} Wh ghost data.", flush=True)
+                    energy_buffer["production"] -= ghost_energy["production"]
+                    if energy_buffer["production"] < 0: energy_buffer["production"] = 0.0
+                    ghost_energy["production"] = 0.0
+                
+                p_prod = 0.0
+            else:
+                p_prod = current_power["production"]
+                inc = p_prod * time_factor
+                if staleness_prod < (SAMPLING_INTERVAL + 5):
+                    ghost_energy["production"] = 0.0
+                else:
+                    ghost_energy["production"] += inc
+                energy_buffer["production"] += inc
+
+            print(f"[Tick 30s] Cons={p_cons}W, Prod={p_prod}W | Buffer Cons={energy_buffer['consumption']:.4f}Wh", flush=True)
+
+            now = datetime.now()
+            current_minute = now.minute
+            is_report_time = (current_minute % REPORT_INTERVAL_MINUTES == 0)
+            
+            if is_report_time and (current_minute != energy_buffer["last_saved_minute"]):
+                
+                target_date = now
+                if current_minute == 0:
+                    target_date = now - timedelta(minutes=1)
+                
+                current_date_str = target_date.strftime("%Y-%m-%d")
+                current_hour_str = target_date.strftime("%H:00") 
+                
+                print(f"\n[Auto-Save {now.strftime('%H:%M')}] Flushing to Key: {current_hour_str}...", flush=True)
+                print(f" -> Buffer Status: Cons={energy_buffer['consumption']:.4f} Wh, Prod={energy_buffer['production']:.4f} Wh", flush=True)
+                
+                # Save Consumption
+                cons_val = energy_buffer["consumption"]
+                if cons_val >= 0: 
+                    try:
+                        redis_model.add_consumption(TARGET_EMAIL, current_date_str, current_hour_str, cons_val)
+                        print(f"   -> [SAVED] Consumption: {cons_val:.4f} Wh", flush=True)
+                    except Exception as e:
+                        print(f"   -> Error saving cons: {e}", flush=True)
+                
+                # Save Production
+                prod_val = energy_buffer["production"]
+                if prod_val >= 0:
+                    try:
+                        redis_model.add_production(TARGET_EMAIL, current_date_str, current_hour_str, prod_val)
+                        print(f"   -> [SAVED] Production: {prod_val:.4f} Wh", flush=True)
+                    except Exception as e:
+                        print(f"   -> Error saving prod: {e}", flush=True)
+                
+                energy_buffer["consumption"] = 0.0
+                energy_buffer["production"] = 0.0
+                energy_buffer["last_saved_minute"] = current_minute
+
+        except Exception as e:
+            print(f"?? [Critical Error] Background thread crashed: {e}", flush=True)
+            print("   -> Restarting loop in 5 seconds...", flush=True)
+            time.sleep(5)
 
 def start_mqtt_thread():
-    client = mqtt.Client()
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.on_message = on_message
     
     try:
@@ -207,7 +293,7 @@ def start_mqtt_thread():
     calc_thread.daemon = True 
     calc_thread.start()
 
-# --- Routes  ---
+# --- Routes ---
 @app.route("/users/create_user", methods=["POST"])
 def create_user():
     try:
@@ -223,50 +309,6 @@ def create_user():
         return jsonify({"error": "Invalid email format"}), 400
     try:
         response = redis_model.create_user(user_name, user_email, user_password)
-        return jsonify(response), 200
-    except Exception as error:
-        return jsonify({"error": str(error)}), 500
-
-@app.route("/users/add_consumption", methods=["POST"])
-def add_consumption():
-    try:
-        data = request.get_json()
-        user_email = data.get("user_email")
-        date = data.get("date")
-        hour = data.get("hour")
-        value = data.get("value")
-    except Exception as error:
-        return jsonify({"error": f"Invalid input: {str(error)}"}), 400
-    if not is_valid_email(user_email):
-        return jsonify({"error": "Invalid email format"}), 400
-    try:
-        value = float(value)
-    except ValueError:
-        return jsonify({"error": "Value must be a number"}), 400
-    try:
-        response = redis_model.add_consumption(user_email, date, hour, value)
-        return jsonify(response), 200
-    except Exception as error:
-        return jsonify({"error": str(error)}), 500
-
-@app.route("/users/add_production", methods=["POST"])
-def add_production():
-    try:
-        data = request.get_json()
-        user_email = data.get("user_email")
-        date = data.get("date")
-        hour = data.get("hour")
-        value = data.get("value")
-    except Exception as error:
-        return jsonify({"error": f"Invalid input: {str(error)}"}), 400
-    if not is_valid_email(user_email):
-        return jsonify({"error": "Invalid email format"}), 400
-    try:
-        value = float(value)
-    except ValueError:
-        return jsonify({"error": "Value must be a number"}), 400
-    try:
-        response = redis_model.add_production(user_email, date, hour, value)
         return jsonify(response), 200
     except Exception as error:
         return jsonify({"error": str(error)}), 500
