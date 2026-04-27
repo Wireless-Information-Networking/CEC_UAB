@@ -6,6 +6,10 @@ Energy software solutions for Citizen Energy Communities (CECs), developed by th
 
 Sirienergy is a web application designed to provide users with insights into their energy consumption, production, and other related metrics. This repository contains the server-side code for the Sirienergy application.
 
+## Sirienergy IoT 
+
+Sirienergy version supporting IoT devices.
+
 ## SMART-LEM
 
 ### Yar
