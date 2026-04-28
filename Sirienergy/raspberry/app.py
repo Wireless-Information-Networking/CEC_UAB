@@ -1,3 +1,4 @@
+
 import os
 import logging
 import time
@@ -6,6 +7,7 @@ import json
 import re
 import hashlib
 import redis
+import csv
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 import paho.mqtt.client as mqtt
@@ -20,10 +22,11 @@ TARGET_EMAIL = "example@uab.cat"
 TOPIC_CONSUMPTION = "inverter/289/Ac/Out/L1/S" 
 TOPIC_PRODUCTION = "solarcharger/288/Yield/Power"
 
-SAMPLING_INTERVAL = 30       
-REPORT_INTERVAL_MINUTES = 15 
+SAMPLING_INTERVAL = 30        
+REPORT_INTERVAL_MINUTES = 15  
 DATA_TIMEOUT = 900
-# =================================================
+
+CSV_DIR = "csv_data"
 
 app = Flask(__name__)
 
@@ -51,6 +54,8 @@ class RedisModel:
             "user_password": hash_password(user_password),
             "user_consumption": {},
             "user_production": {},
+            "user_battery": {},
+            "user_yield": {}
         }
         self.client.execute_command("JSON.SET", key, ".", json.dumps(user_document))
         return {"message": f"User '{user_name}' created."}
@@ -87,6 +92,49 @@ class RedisModel:
     def add_production(self, user_email, date, hour, value):
         return self.add_data(user_email, date, hour, value, "user_production")
 
+    def add_battery_status(self, user_email, date, hour, voltage, current, power):
+        key = f"user:{user_email}"
+        base_path = "$.user_battery"
+        self._initialize_json_path(key, base_path)
+        date_path = f"{base_path}.{date}"
+        self._initialize_json_path(key, date_path)
+        
+        try:
+            hour_path = f"{date_path}.{hour}"
+            status_data = {"voltage": voltage, "current": current, "power": power}
+            self.client.execute_command("JSON.SET", key, hour_path, json.dumps(status_data))
+        except redis.RedisError as e:
+            print(f"Redis Error: {e}")
+            raise ValueError("Failed to update battery status")
+
+    def add_yield_status(self, user_email, date, hour, yield_today, yield_yesterday):
+        key = f"user:{user_email}"
+        base_path = "$.user_yield"
+        self._initialize_json_path(key, base_path)
+        date_path = f"{base_path}.{date}"
+        self._initialize_json_path(key, date_path)
+        
+        try:
+            hour_path = f"{date_path}.{hour}"
+            status_data = {"yield_today": yield_today, "yield_yesterday": yield_yesterday}
+            self.client.execute_command("JSON.SET", key, hour_path, json.dumps(status_data))
+        except redis.RedisError as e:
+            print(f"Redis Error: {e}")
+            raise ValueError("Failed to update yield status")
+            
+    def get_battery_history(self, user_email, date):
+        key = f"user:{user_email}"
+        path = f"$.user_battery.{date}"
+        try:
+            data = self.client.execute_command("JSON.GET", key, path)
+            if data and data != "[]":
+                parsed_data = json.loads(data)
+                return parsed_data[0] if isinstance(parsed_data, list) else parsed_data
+            return {}
+        except redis.RedisError:
+            return {}
+    
+
 redis_model = RedisModel()
 
 # --- MQTT Logic ---
@@ -94,6 +142,17 @@ redis_model = RedisModel()
 current_power = {
     "consumption": 0.0,
     "production": 0.0
+}
+
+current_battery = {
+    "voltage": 0.0,
+    "current": 0.0,
+    "power": 0.0
+}
+
+current_yield = {
+    "today": 0.0,
+    "yesterday": 0.0
 }
 
 last_update_time = {
@@ -112,7 +171,60 @@ ghost_energy = {
     "production": 0.0
 }
 
+battery_accumulator = {
+    "voltage_sum": 0.0,
+    "power_sum": 0.0,
+    "count": 0
+}
+
+web_display_snapshot = {
+    "battery": {
+        "voltage": 0.0,
+        "power": 0.0
+    },
+    "yield": {
+        "today": 0.0,
+        "yesterday": 0.0
+    }
+}
+
 portal_id = None
+
+
+def save_hourly_csv(date_str, hour_str, cons_val, prod_val, batt_v, batt_i, batt_p, yield_today, yield_yesterday):
+
+    try:
+        year = date_str.split("-")[0]
+        
+        if not os.path.exists(CSV_DIR):
+            os.makedirs(CSV_DIR)
+            
+        filename = os.path.join(CSV_DIR, f"hourly_energy_{year}.csv")
+        file_exists = os.path.isfile(filename)
+        
+        with open(filename, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            
+            if not file_exists:
+                writer.writerow(["Date", "Hour", "Consumption_Wh", "Production_Wh", "Battery_V", "Battery_A", "Battery_Power_W", "Yield_Today", "Yield_Yesterday", "Timestamp"])
+                print(f"   -> [CSV] Created new file: {filename}", flush=True)
+            
+            writer.writerow([
+                date_str, 
+                hour_str, 
+                f"{cons_val:.4f}", 
+                f"{prod_val:.4f}",
+                f"{batt_v:.2f}",
+                f"{batt_i:.2f}",
+                f"{batt_p:.2f}",
+                f"{yield_today:.2f}",
+                f"{yield_yesterday:.2f}",
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ])
+            
+        print(f"   -> [CSV] Record saved to {filename}", flush=True)
+    except Exception as e:
+        print(f"   -> [CSV Error] Could not save to file: {e}", flush=True)
 
 def keep_alive_worker(client, pid):
     topic = f"R/{pid}/system/0/Serial"
@@ -142,7 +254,7 @@ def on_disconnect(client, userdata, rc):
         print(f"[MQTT] Disconnected cleanly.", flush=True)
 
 def on_message(client, userdata, msg):
-    global current_power, last_update_time, portal_id
+    global current_power, current_battery, current_yield, last_update_time, portal_id
     topic = msg.topic
     
     topic_parts = topic.split('/')
@@ -150,39 +262,65 @@ def on_message(client, userdata, msg):
         possible_id = topic_parts[1]
         if len(possible_id) > 5:
             portal_id = possible_id
-            print(f"?? [System] Found Portal ID: {portal_id}", flush=True)
+            print(f"[System] Found Portal ID: {portal_id}", flush=True)
             start_keep_alive(client, portal_id)
 
-    if TOPIC_CONSUMPTION not in topic and TOPIC_PRODUCTION not in topic:
+    is_consumption = TOPIC_CONSUMPTION in topic
+    is_production = TOPIC_PRODUCTION in topic
+    is_battery = "system/0/Dc/Battery" in topic
+    is_yield_today = "History/Daily/0/Yield" in topic
+    is_yield_yesterday = "History/Daily/1/Yield" in topic
+
+    if not (is_consumption or is_production or is_battery or is_yield_today or is_yield_yesterday):
         return
 
     try:
         payload = json.loads(msg.payload.decode('utf-8'))
-        if 'value' not in payload: return
+        if 'value' not in payload: 
+            return
         
         raw_val = payload['value']
+        
         if raw_val is None:
             val = 0.0
         else:
-            val = float(raw_val)
+            try:
+                val = float(raw_val)
+            except (ValueError, TypeError):
+                return 
         
         current_time = time.time()
 
-        if TOPIC_CONSUMPTION in topic:
+        if is_consumption:
             current_power["consumption"] = val
             last_update_time["consumption"] = current_time
             
-        elif TOPIC_PRODUCTION in topic:
+        elif is_production:
             current_power["production"] = val
             last_update_time["production"] = current_time
             
+        elif is_battery:
+            if "Voltage" in topic:
+                current_battery["voltage"] = val
+            elif "Current" in topic:
+                current_battery["current"] = val
+            elif "Power" in topic:
+                current_battery["power"] = val
+                
+        elif is_yield_today:
+            current_yield["today"] = val
+            
+        elif is_yield_yesterday:
+            current_yield["yesterday"] = val
+            
     except Exception as e:
-        print(f"[MQTT Error] {e}", flush=True)
+        print(f"[MQTT Error] {e} in topic {msg.topic}", flush=True)
 
 def background_energy_calculator():
-    global energy_buffer, current_power, last_update_time, ghost_energy
+    global energy_buffer, current_power, current_battery, current_yield, last_update_time, ghost_energy
+    global battery_accumulator, web_display_snapshot
     
-    print(f"[Background] Calculator Started.", flush=True)
+    print("[Background] Calculator Started.", flush=True)
 
     while True:
         try:
@@ -191,12 +329,10 @@ def background_energy_calculator():
             time_factor = SAMPLING_INTERVAL / 3600.0
             current_ts = time.time()
             
-            # --- Consumption ---
             staleness_cons = current_ts - last_update_time["consumption"]
             
             if staleness_cons > DATA_TIMEOUT:
                 if ghost_energy["consumption"] > 0:
-                    print(f"?? [Rollback] Cons idle for {int(staleness_cons)}s. Removing {ghost_energy['consumption']:.4f} Wh ghost data.", flush=True)
                     energy_buffer["consumption"] -= ghost_energy["consumption"]
                     if energy_buffer["consumption"] < 0: energy_buffer["consumption"] = 0.0
                     ghost_energy["consumption"] = 0.0
@@ -205,18 +341,18 @@ def background_energy_calculator():
             else:
                 p_cons = current_power["consumption"]
                 inc = p_cons * time_factor
+                
                 if staleness_cons < (SAMPLING_INTERVAL + 5):
                     ghost_energy["consumption"] = 0.0
                 else:
                     ghost_energy["consumption"] += inc
+
                 energy_buffer["consumption"] += inc
 
-            # --- Production ---
             staleness_prod = current_ts - last_update_time["production"]
             
             if staleness_prod > DATA_TIMEOUT:
                 if ghost_energy["production"] > 0:
-                    print(f"?? [Rollback] Prod idle for {int(staleness_prod)}s. Removing {ghost_energy['production']:.4f} Wh ghost data.", flush=True)
                     energy_buffer["production"] -= ghost_energy["production"]
                     if energy_buffer["production"] < 0: energy_buffer["production"] = 0.0
                     ghost_energy["production"] = 0.0
@@ -225,13 +361,17 @@ def background_energy_calculator():
             else:
                 p_prod = current_power["production"]
                 inc = p_prod * time_factor
+                
                 if staleness_prod < (SAMPLING_INTERVAL + 5):
                     ghost_energy["production"] = 0.0
                 else:
                     ghost_energy["production"] += inc
+
                 energy_buffer["production"] += inc
 
-            print(f"[Tick 30s] Cons={p_cons}W, Prod={p_prod}W | Buffer Cons={energy_buffer['consumption']:.4f}Wh", flush=True)
+            battery_accumulator["voltage_sum"] += current_battery["voltage"]
+            battery_accumulator["power_sum"] += current_battery["power"]
+            battery_accumulator["count"] += 1
 
             now = datetime.now()
             current_minute = now.minute
@@ -239,6 +379,22 @@ def background_energy_calculator():
             
             if is_report_time and (current_minute != energy_buffer["last_saved_minute"]):
                 
+                if battery_accumulator["count"] > 0:
+                    avg_v = battery_accumulator["voltage_sum"] / battery_accumulator["count"]
+                    avg_p = battery_accumulator["power_sum"] / battery_accumulator["count"]
+                else:
+                    avg_v = current_battery["voltage"]
+                    avg_p = current_battery["power"]
+                    
+                web_display_snapshot["battery"]["voltage"] = round(avg_v, 2)
+                web_display_snapshot["battery"]["power"] = round(avg_p, 2)
+                web_display_snapshot["yield"]["today"] = current_yield["today"]
+                web_display_snapshot["yield"]["yesterday"] = current_yield["yesterday"]
+                
+                battery_accumulator["voltage_sum"] = 0.0
+                battery_accumulator["power_sum"] = 0.0
+                battery_accumulator["count"] = 0
+
                 target_date = now
                 if current_minute == 0:
                     target_date = now - timedelta(minutes=1)
@@ -246,36 +402,46 @@ def background_energy_calculator():
                 current_date_str = target_date.strftime("%Y-%m-%d")
                 current_hour_str = target_date.strftime("%H:00") 
                 
-                print(f"\n[Auto-Save {now.strftime('%H:%M')}] Flushing to Key: {current_hour_str}...", flush=True)
-                print(f" -> Buffer Status: Cons={energy_buffer['consumption']:.4f} Wh, Prod={energy_buffer['production']:.4f} Wh", flush=True)
-                
-                # Save Consumption
                 cons_val = energy_buffer["consumption"]
                 if cons_val >= 0: 
                     try:
                         redis_model.add_consumption(TARGET_EMAIL, current_date_str, current_hour_str, cons_val)
-                        print(f"   -> [SAVED] Consumption: {cons_val:.4f} Wh", flush=True)
                     except Exception as e:
-                        print(f"   -> Error saving cons: {e}", flush=True)
+                        pass
                 
-                # Save Production
                 prod_val = energy_buffer["production"]
                 if prod_val >= 0:
                     try:
                         redis_model.add_production(TARGET_EMAIL, current_date_str, current_hour_str, prod_val)
-                        print(f"   -> [SAVED] Production: {prod_val:.4f} Wh", flush=True)
                     except Exception as e:
-                        print(f"   -> Error saving prod: {e}", flush=True)
+                        pass
+
+                batt_v = current_battery["voltage"]
+                batt_i = current_battery["current"]
+                batt_p = current_battery["power"]
+                try:
+                    redis_model.add_battery_status(TARGET_EMAIL, current_date_str, current_hour_str, batt_v, batt_i, batt_p)
+                except Exception as e:
+                    pass
+                    
+                y_today = current_yield["today"]
+                y_yesterday = current_yield["yesterday"]
+                try:
+                    redis_model.add_yield_status(TARGET_EMAIL, current_date_str, current_hour_str, y_today, y_yesterday)
+                except Exception as e:
+                    pass
                 
+                if cons_val > 0 or prod_val > 0 or batt_v > 0 or y_today > 0:
+                    save_hourly_csv(current_date_str, current_hour_str, cons_val, prod_val, batt_v, batt_i, batt_p, y_today, y_yesterday)
+
                 energy_buffer["consumption"] = 0.0
                 energy_buffer["production"] = 0.0
                 energy_buffer["last_saved_minute"] = current_minute
 
         except Exception as e:
-            print(f"?? [Critical Error] Background thread crashed: {e}", flush=True)
-            print("   -> Restarting loop in 5 seconds...", flush=True)
             time.sleep(5)
-
+            
+            
 def start_mqtt_thread():
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
     client.on_connect = on_connect
@@ -310,6 +476,36 @@ def create_user():
     try:
         response = redis_model.create_user(user_name, user_email, user_password)
         return jsonify(response), 200
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+        
+@app.route("/users/energy_data", methods=["GET"])
+def get_energy_data():
+    global web_display_snapshot, current_yield
+    
+    payload = {
+        "battery": web_display_snapshot["battery"],
+        "yield": {
+            "today": current_yield["today"],
+            "yesterday": current_yield["yesterday"]
+        }
+    }
+    
+    return jsonify(payload), 200
+
+@app.route("/users/get_battery_day", methods=["POST"])
+def get_battery_day():
+    try:
+        data = request.get_json()
+        user_email = data.get("email")
+        target_date = datetime.now().strftime("%Y-%m-%d")
+        
+        if not user_email:
+            return jsonify({"error": "Missing email parameter"}), 400
+            
+        battery_history = redis_model.get_battery_history(user_email, target_date)
+        return jsonify({"hourly": battery_history}), 200
+        
     except Exception as error:
         return jsonify({"error": str(error)}), 500
 
