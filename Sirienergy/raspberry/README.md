@@ -3,7 +3,7 @@
 1. The initial phase involves obtaining the Venus OS software. Core installation procedures are available at the primary repository.
 [Venus OS Repository](https://github.com/victronenergy/venus)
 
-The selection of a precise disk image matching the Raspberry Pi hardware is necessary. The official wiki provides a guide for identifying the correct version.
+    The selection of a precise disk image matching the Raspberry Pi hardware is necessary. The official wiki provides a guide for identifying the correct version.
 [Raspberry Pi Image Selection](https://github.com/victronenergy/venus/wiki/raspberrypi-install-venus-image)
 
 2. The dbus flashmq application works as a fast digital translator for solar power systems. It changes internal machine codes from batteries and inverters into standard internet formats. This process allows for reliable remote monitoring of live power data and lets system managers adjust settings from any location. Full operational details are found in the official documentation.
