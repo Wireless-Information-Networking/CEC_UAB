@@ -577,18 +577,84 @@ async function getSell() {
   }
 }
 
+// Global variables to hold the chart instance and the timer
+let combinedChartInstance = null;
+let combinedUpdateInterval = null;
+
 async function displayCombinedGraph() {
   const email = emailInputEl.value;
   const combinedCard = document.getElementById("prodcons-card");
 
   if (!email) {
-    combinedCard.innerHTML =
-      "<p class='error'>All fields are required. Please complete the form.</p>";
+    combinedCard.innerHTML = "<p class='error'>All fields are required. Please complete the form.</p>";
     return;
   }
 
+  // Setup the chart canvas only once
+  if (!combinedChartInstance) {
+    combinedCard.innerHTML = '<canvas id="combinedChartCanvas"></canvas>';
+    const canvas = document.getElementById("combinedChartCanvas");
+
+    combinedChartInstance = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: "Energy Production (Wh)",
+            data: [],
+            borderColor: "rgba(0, 0, 255, 1)",
+            backgroundColor: "rgba(135, 206, 235, 0.3)",
+            borderWidth: 2,
+            fill: true,
+          },
+          {
+            label: "Energy Consumption (Wh)",
+            data: [],
+            borderColor: "rgba(255, 0, 0, 1)",
+            backgroundColor: "rgba(255, 99, 132, 0.3)",
+            borderWidth: 2,
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            display: true,
+            title: { display: true, text: "Time of Day" },
+          },
+          y: {
+            display: true,
+            title: { display: true, text: "Energy (Wh)" },
+            beginAtZero: true,
+          },
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function (tooltipItem) {
+                return `${tooltipItem.raw} Wh`;
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Start the 5-second automatic refresh timer
+    if (combinedUpdateInterval) clearInterval(combinedUpdateInterval);
+    combinedUpdateInterval = setInterval(() => updateCombinedGraphData(email), 5000);
+  }
+
+  // Fetch the initial data immediately for the first rendering
+  await updateCombinedGraphData(email);
+}
+
+// Dedicated function to fetch data and push it into the existing chart
+async function updateCombinedGraphData(email) {
   try {
-    // Fetch production and consumption data in parallel
     const [productionResponse, consumptionResponse] = await Promise.all([
       fetch("/user_data/get_production_day", {
         method: "POST",
@@ -606,84 +672,31 @@ async function displayCombinedGraph() {
     const consumptionData = await consumptionResponse.json();
 
     if (productionData.error || consumptionData.error) {
-      combinedCard.innerHTML = `<p class='error'>
-                ${productionData.error || ""} ${consumptionData.error || ""}
-            </p>`;
-      return;
+      console.error("Data error:", productionData.error, consumptionData.error);
+      return; 
     }
 
     const productionHourly = productionData.hourly;
     const consumptionHourly = consumptionData.hourly;
 
-    const hours = Object.keys(productionHourly); // Assume both datasets share the same hours
+    const hours = Object.keys(productionHourly);
     const productionValues = Object.values(productionHourly).map((value) =>
-      value.toFixed(2)
+      value.toFixed(3)
     );
     const consumptionValues = Object.values(consumptionHourly).map((value) =>
-      value.toFixed(2)
+      value.toFixed(3)
     );
 
-    combinedCard.innerHTML = ``;
-    const canvas = document.createElement("canvas");
-    combinedCard.appendChild(canvas);
+    // Inject the new data arrays directly into the chart instance
+    combinedChartInstance.data.labels = hours;
+    combinedChartInstance.data.datasets[0].data = productionValues;
+    combinedChartInstance.data.datasets[1].data = consumptionValues;
 
-    new Chart(canvas, {
-      type: "line",
-      data: {
-        labels: hours,
-        datasets: [
-          {
-            label: "Energy Production (kWh)",
-            data: productionValues,
-            borderColor: "rgba(0, 0, 255, 1)",
-            backgroundColor: "rgba(135, 206, 235, 0.3)",
-            borderWidth: 2,
-            fill: true,
-          },
-          {
-            label: "Energy Consumption (kWh)",
-            data: consumptionValues,
-            borderColor: "rgba(255, 0, 0, 1)",
-            backgroundColor: "rgba(255, 99, 132, 0.3)",
-            borderWidth: 2,
-            fill: true,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: {
-            display: true,
-            title: {
-              display: true,
-              text: "Time of Day",
-            },
-          },
-          y: {
-            display: true,
-            title: {
-              display: true,
-              text: "Energy (kWh)",
-            },
-            beginAtZero: true,
-          },
-        },
-        plugins: {
-          tooltip: {
-            callbacks: {
-              label: function (tooltipItem) {
-                return `${tooltipItem.raw} kWh`;
-              },
-            },
-          },
-        },
-      },
-    });
+    // Call update with 'none' to avoid flashing animations during the refresh
+    combinedChartInstance.update('none');
+
   } catch (error) {
-    console.error("Fetch error:", error);
-    combinedCard.innerHTML =
-      "<p class='error'>Failed to fetch data. Please try again later.</p>";
+    console.error("Live fetch error:", error);
   }
 }
 
@@ -733,7 +746,7 @@ async function getSurplus() {
 
     const hours = Object.keys(surplusHourly);
     const surplusValues = Object.values(surplusHourly).map((value) =>
-      value.toFixed(2)
+      value.toFixed(3)
     );
 
     // ✅ Find surplus hours
@@ -823,7 +836,7 @@ async function getSurplus() {
         labels: hours,
         datasets: [
           {
-            label: "Surplus (kWh)",
+            label: "Surplus (Wh)",
             data: dataset,
             borderColor: dataset.map((d) => d.borderColor),
             backgroundColor: dataset.map((d) => d.backgroundColor),
@@ -846,7 +859,7 @@ async function getSurplus() {
             display: true,
             title: {
               display: true,
-              text: "Energy (kWh)",
+              text: "Energy (Wh)",
             },
             beginAtZero: true,
           },
@@ -855,7 +868,7 @@ async function getSurplus() {
           tooltip: {
             callbacks: {
               label: function (tooltipItem) {
-                return `${tooltipItem.raw.y} kWh`;
+                return `${tooltipItem.raw.y} Wh`;
               },
             },
           },
@@ -915,6 +928,183 @@ async function getAdvice() {
   }
 }
 
+//
+let liveBatteryChart = null;
+let liveYieldChart = null;
+let batteryUpdateInterval = null;
+
+async function getBatteryData() {
+  const email = emailInputEl ? emailInputEl.value : null; // 确保获取当前查询的用户邮箱
+  const bCard = document.getElementById("live-battery-card");
+  const yCard = document.getElementById("live-yield-card");
+
+  if (!bCard || !yCard || !email) return;
+
+  // 1. 初始化空图表
+  if (!liveBatteryChart) {
+    bCard.innerHTML = '<canvas id="liveBatteryCanvas"></canvas>';
+    const bCanvas = document.getElementById("liveBatteryCanvas");
+
+    liveBatteryChart = new Chart(bCanvas, {
+      type: "line",
+      data: {
+        datasets: [
+          {
+            label: "Voltage (V)",
+            data: [], // 初始设定为空数组
+            borderColor: "rgba(52, 152, 219, 1)",
+            backgroundColor: "rgba(52, 152, 219, 0.2)",
+            yAxisID: "yV",
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 1
+          },
+          {
+            label: "Power (W)",
+            data: [], // 初始设定为空数组
+            borderColor: "rgba(243, 156, 18, 1)",
+            backgroundColor: "rgba(243, 156, 18, 0.2)",
+            yAxisID: "yP",
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            type: "linear",
+            position: "bottom",
+            min: 0,
+            max: 24, 
+            ticks: {
+              stepSize: 1, 
+              callback: function(value) {
+                return value.toString().padStart(2, '0') + ':00';
+              }
+            },
+            title: { display: true, text: "Time of Day (24h)" }
+          },
+          yV: {
+            type: "linear",
+            position: "left",
+            display: true,
+            title: { display: true, text: "Volts" }
+          },
+          yP: {
+            type: "linear",
+            position: "right",
+            display: true,
+            title: { display: true, text: "Watts" },
+            grid: { drawOnChartArea: false }
+          }
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              title: function(context) {
+                const decimalTime = context[0].parsed.x;
+                const hrs = Math.floor(decimalTime);
+                const mins = Math.floor((decimalTime - hrs) * 60);
+                const secs = Math.floor((((decimalTime - hrs) * 60) - mins) * 60);
+                return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // 启动定时刷新机制
+    if (batteryUpdateInterval) clearInterval(batteryUpdateInterval);
+    batteryUpdateInterval = setInterval(() => updateBatteryGraphData(email), 5000);
+  }
+  
+  // 产量图表初始化保持不变
+  if (!liveYieldChart) {
+    yCard.innerHTML = '<canvas id="liveYieldCanvas"></canvas>';
+    const yCanvas = document.getElementById("liveYieldCanvas");
+
+    liveYieldChart = new Chart(yCanvas, {
+      type: "bar",
+      data: {
+        labels: ["Yesterday Total", "Today Real-time"],
+        datasets: [
+          {
+            label: "Energy Yield (Wh)",
+            data: [0, 0],
+            backgroundColor: ["rgba(149, 165, 166, 0.8)", "rgba(46, 204, 113, 0.8)"]
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            display: true,
+            title: { display: true, text: "Energy (Wh)" },
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  }
+
+  // 初始加载触发一次全量查询
+  await updateBatteryGraphData(email);
+}
+
+// 2. 独立的全量数据拉取与覆盖函数
+async function updateBatteryGraphData(email) {
+  try {
+    // 并发请求电池历史数据与实时产量数据
+    const [batteryResponse, liveResponse] = await Promise.all([
+      fetch("/users/get_battery_day", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }),
+      fetch("/users/energy_data") // 保持获取产量及实时心跳
+    ]);
+
+    const batteryData = await batteryResponse.json();
+    const liveData = await liveResponse.json();
+
+    if (!batteryData.error) {
+      const hourlyRecords = batteryData.hourly || {};
+      const newVoltageData = [];
+      const newPowerData = [];
+
+      // 将 JSON 键值对解析为坐标点
+      for (const timeStr in hourlyRecords) {
+        const parts = timeStr.split(":");
+        const decimalHours = parseInt(parts[0]) + (parseInt(parts[1]) / 60);
+        
+        newVoltageData.push({ x: decimalHours, y: hourlyRecords[timeStr].voltage });
+        newPowerData.push({ x: decimalHours, y: hourlyRecords[timeStr].power });
+      }
+
+      // 执行绝对赋值，直接替换图表原有数据
+      liveBatteryChart.data.datasets[0].data = newVoltageData;
+      liveBatteryChart.data.datasets[1].data = newPowerData;
+      liveBatteryChart.update('none');
+    }
+
+    if (liveData && liveData.yield) {
+      // 更新产量柱状图
+      liveYieldChart.data.datasets[0].data = [liveData.yield.yesterday, liveData.yield.today];
+      liveYieldChart.update('none');
+    }
+
+  } catch (error) {
+    console.error("Data fetch error:", error);
+  }
+}
+
 // Key to access stored data in localStorage
 const STORAGE_KEY = "pvData";
 
@@ -967,6 +1157,7 @@ window.onload = function () {
     displayCombinedGraph();
     getSurplus();
     getAdvice();
+    getBatteryData();
   } else {
     showUser();
     alert("Please complete user's form");
