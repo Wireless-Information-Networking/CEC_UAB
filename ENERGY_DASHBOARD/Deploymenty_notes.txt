@@ -1,0 +1,109 @@
+SMART ENERGY OPTIMIZER – DEPLOYMENT NOTES TO BE NOTED
+
+Project Overview
+----------------
+This is a Dockerized web application for Human-in-the-Loop Predictive Energy Optimization.
+
+Architecture:
+Browser
+→ Nginx reverse proxy
+→ Gunicorn
+→ Flask application
+→ ML models + optimization engine
+
+Docker Services
+---------------
+1. energy_app
+   - Flask application
+   - Gunicorn production server
+   - loads ML models
+   - runs optimization engine
+   - internal port: 5000
+
+2. energy_nginx
+   - Nginx reverse proxy
+   - handles HTTPS
+   - forwards traffic to Flask app
+   - external ports: 80 and 443
+
+Requirements
+------------
+Required software:
+- Docker Desktop / Docker Engine
+- Docker Compose
+
+Required ports:
+- 80
+- 443
+
+Important:
+If port 80 is occupied (Windows IIS / HTTP service), nginx container will fail to start.
+
+Example Windows fix:
+Stop-Service W3SVC -Force
+
+Project Start
+-------------
+From project root:
+
+docker compose up --build
+
+Or background:
+
+docker compose up --build -d
+
+Project Stop
+------------
+docker compose down
+
+Health Check
+------------
+Application health endpoint:
+
+http://localhost/health
+
+Expected response:
+status OK / JSON health response
+
+SSL
+---
+Current SSL certificates are self-signed test certificates:
+
+nginx/certs/cert.pem
+nginx/certs/key.pem
+
+For production deployment:
+replace with official university SSL certificates if required.
+
+Configuration
+-------------
+Environment configuration is in:
+
+.env
+
+Data / Models
+-------------
+Required folders:
+- data/
+- models/
+
+These contain datasets and trained model artefacts required for runtime execution.
+
+Application Access
+------------------
+After successful deployment:
+
+http://localhost
+https://localhost
+
+Browser may show certificate warning because SSL certificate is self-signed.
+
+Notes
+-----
+This deployment was tested locally in Docker with:
+- Flask
+- Gunicorn
+- Nginx reverse proxy
+- Docker Compose
+- HTTPS enabled
+
